@@ -1398,6 +1398,31 @@ impl SplitRenderer {
             };
         }
 
+        // Fallback: if we still did not map the cursor, approximate using view indices
+        if !cursor_found {
+            if let Some(view_idx) = source_to_view.get(&state.cursors.primary().position) {
+                let mut y = 0u16;
+                for (idx, (offset, text, _)) in view_lines.iter().enumerate() {
+                    if idx < view_start_line_idx {
+                        continue;
+                    }
+                    let len = text.chars().count();
+                    if *view_idx >= *offset && *view_idx <= *offset + len {
+                        let skip = if idx == view_start_line_idx {
+                            view_start_line_skip
+                        } else {
+                            0
+                        };
+                        cursor_screen_x =
+                            view_idx.saturating_sub(*offset).saturating_sub(skip) as u16;
+                        cursor_screen_y = y;
+                        break;
+                    }
+                    y = y.saturating_add(1);
+                }
+            }
+        }
+
         while lines.len() < render_area.height as usize {
             lines.push(Line::raw(""));
         }
