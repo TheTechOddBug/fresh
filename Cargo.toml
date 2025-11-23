@@ -3,7 +3,11 @@ name = "fresh-editor"
 version = "0.1.1"
 authors = ["Noam Lewis"]
 edition = "2021"
+description = "A lightweight, fast terminal-based text editor with LSP support and TypeScript plugins"
+license = "GPL-2.0"
 repository = "https://github.com/sinelaw/fresh"
+keywords = ["editor", "terminal", "tui", "text-editor", "lsp"]
+categories = ["command-line-utilities", "text-editors"]
 
 [[bin]]
 name = "fresh"
