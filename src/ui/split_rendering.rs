@@ -1403,7 +1403,7 @@ impl SplitRenderer {
                         style = style.fg(theme.editor_fg).bg(theme.inactive_cursor);
                     }
 
-                    // Determine display character (tabs already expanded in flatten_tokens)
+                    // Determine display character (tabs already expanded in ViewLineIterator)
                     // Show tab indicator (→) at the start of tab expansions
                     let tab_indicator: String;
                     let display_char: &str = if is_cursor && lsp_waiting && is_active {
@@ -1575,7 +1575,7 @@ impl SplitRenderer {
                 }
             }
 
-            // ViewLines are already wrapped (Break tokens became newlines in flatten_tokens)
+            // ViewLines are already wrapped (Break tokens became newlines in ViewLineIterator)
             // so each line is one visual line - no need to wrap again
             let current_y = lines.len() as u16;
             last_seg_y = Some(current_y);
