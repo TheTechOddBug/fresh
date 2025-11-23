@@ -298,6 +298,25 @@ A sample project for testing.
         fs::copy(&git_log_src, &git_log_dst)
             .unwrap_or_else(|e| panic!("Failed to copy git_log.ts from {:?}: {}", git_log_src, e));
     }
+
+    /// Set up git blame plugin by copying it from the project's plugins directory
+    pub fn setup_git_blame_plugin(&self) {
+        // Create plugins directory in the test repo
+        let plugins_dir = self.path.join("plugins");
+        fs::create_dir_all(&plugins_dir).expect("Failed to create plugins directory");
+
+        // Get the project root
+        let project_root = std::env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .expect("CARGO_MANIFEST_DIR not set");
+
+        // Copy git_blame.ts plugin
+        let git_blame_src = project_root.join("plugins/git_blame.ts");
+        let git_blame_dst = plugins_dir.join("git_blame.ts");
+        fs::copy(&git_blame_src, &git_blame_dst).unwrap_or_else(|e| {
+            panic!("Failed to copy git_blame.ts from {:?}: {}", git_blame_src, e)
+        });
+    }
 }
 
 /// Helper to restore original directory

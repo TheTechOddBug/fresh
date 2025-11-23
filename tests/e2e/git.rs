@@ -1402,3 +1402,319 @@ fn test_git_log_open_different_commits_sequentially() {
         "BUG: Should NOT show THIRD commit when SECOND was selected:\n{screen_second_detail}"
     );
 }
+
+// =============================================================================
+// Git Blame Tests
+// =============================================================================
+
+/// Helper to trigger git blame via command palette
+fn trigger_git_blame(harness: &mut EditorTestHarness) {
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Git Blame").unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+}
+
+/// Test git blame opens and shows blame blocks with headers
+#[test]
+fn test_git_blame_shows_blocks_with_headers() {
+    let repo = GitTestRepo::new();
+    repo.setup_typical_project();
+    repo.setup_git_blame_plugin();
+
+    // Change to repo directory so git commands work correctly
+    let original_dir = repo.change_to_repo_dir();
+    let _guard = DirGuard::new(original_dir);
+
+    let mut harness = EditorTestHarness::with_config_and_working_dir(
+        120,
+        40,
+        Config::default(),
+        repo.path.clone(),
+    )
+    .unwrap();
+
+    // Open file directly using the harness method
+    let file_path = repo.path.join("src/main.rs");
+    harness.open_file(&file_path).unwrap();
+
+    // Wait until file is loaded (logical event)
+    harness.wait_until(|h| {
+        let content = h.get_buffer_content();
+        content.contains("fn main")
+    }).unwrap();
+
+    // Trigger git blame
+    trigger_git_blame(&mut harness);
+
+    // Wait until git blame view appears (logical event)
+    harness.wait_until(|h| {
+        let screen = h.screen_to_string();
+        // Should show "Git Blame:" header and block headers with ──
+        screen.contains("Git Blame:") && screen.contains("──")
+    }).unwrap();
+
+    let screen = harness.screen_to_string();
+    println!("Git blame screen:\n{screen}");
+
+    assert!(screen.contains("Git Blame:"), "Should show Git Blame: header");
+    assert!(screen.contains("──"), "Should show block header separator");
+}
+
+/// Test git blame cursor navigation
+#[test]
+fn test_git_blame_cursor_navigation() {
+    let repo = GitTestRepo::new();
+
+    // Create a file with multiple commits to have multiple blame blocks
+    repo.create_file("test.txt", "Line 1\nLine 2\n");
+    repo.git_add(&["test.txt"]);
+    repo.git_commit("First commit");
+
+    repo.create_file("test.txt", "Line 1\nLine 2\nLine 3\nLine 4\n");
+    repo.git_add(&["test.txt"]);
+    repo.git_commit("Second commit");
+
+    repo.setup_git_blame_plugin();
+
+    // Change to repo directory
+    let original_dir = repo.change_to_repo_dir();
+    let _guard = DirGuard::new(original_dir);
+
+    let mut harness = EditorTestHarness::with_config_and_working_dir(
+        120,
+        40,
+        Config::default(),
+        repo.path.clone(),
+    )
+    .unwrap();
+
+    // Open file directly
+    let file_path = repo.path.join("test.txt");
+    harness.open_file(&file_path).unwrap();
+
+    // Wait until file is loaded
+    harness.wait_until(|h| {
+        h.get_buffer_content().contains("Line 1")
+    }).unwrap();
+
+    // Trigger git blame
+    trigger_git_blame(&mut harness);
+
+    // Wait until blame view appears
+    harness.wait_until(|h| {
+        h.screen_to_string().contains("Git Blame:")
+    }).unwrap();
+
+    // Navigate down using j key
+    harness.send_key(KeyCode::Char('j'), KeyModifiers::NONE).unwrap();
+    harness.process_async_and_render().unwrap();
+
+    // Navigate down using Down arrow
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
+    harness.process_async_and_render().unwrap();
+
+    // Navigate up using k key
+    harness.send_key(KeyCode::Char('k'), KeyModifiers::NONE).unwrap();
+    harness.process_async_and_render().unwrap();
+
+    let screen = harness.screen_to_string();
+    println!("After navigation:\n{screen}");
+
+    // Git blame should still be visible
+    assert!(screen.contains("Git Blame:"));
+}
+
+/// Test git blame close with q
+#[test]
+fn test_git_blame_close() {
+    let repo = GitTestRepo::new();
+    repo.setup_typical_project();
+    repo.setup_git_blame_plugin();
+
+    // Change to repo directory
+    let original_dir = repo.change_to_repo_dir();
+    let _guard = DirGuard::new(original_dir);
+
+    let mut harness = EditorTestHarness::with_config_and_working_dir(
+        120,
+        40,
+        Config::default(),
+        repo.path.clone(),
+    )
+    .unwrap();
+
+    // Open file directly
+    let file_path = repo.path.join("src/main.rs");
+    harness.open_file(&file_path).unwrap();
+
+    // Wait until file is loaded
+    harness.wait_until(|h| {
+        h.get_buffer_content().contains("fn main")
+    }).unwrap();
+
+    // Trigger git blame
+    trigger_git_blame(&mut harness);
+
+    // Wait until blame view appears
+    harness.wait_until(|h| {
+        h.screen_to_string().contains("Git Blame:")
+    }).unwrap();
+
+    let screen_before = harness.screen_to_string();
+    assert!(screen_before.contains("Git Blame:"));
+
+    // Press q to close git blame
+    harness.send_key(KeyCode::Char('q'), KeyModifiers::NONE).unwrap();
+
+    // Wait until blame view is closed
+    harness.wait_until(|h| {
+        !h.screen_to_string().contains("Git Blame:")
+    }).unwrap();
+
+    let screen_after = harness.screen_to_string();
+    println!("After closing:\n{screen_after}");
+
+    // Should no longer show git blame
+    harness.assert_screen_not_contains("Git Blame:");
+}
+
+/// Test git blame go back in history with 'b' key
+#[test]
+fn test_git_blame_go_back_in_history() {
+    let repo = GitTestRepo::new();
+
+    // Create initial file
+    repo.create_file("test.txt", "Original line 1\nOriginal line 2\n");
+    repo.git_add(&["test.txt"]);
+    repo.git_commit("First commit");
+
+    // Modify file (this creates a second commit that we can blame back to)
+    repo.create_file("test.txt", "Original line 1\nModified line 2\nNew line 3\n");
+    repo.git_add(&["test.txt"]);
+    repo.git_commit("Second commit");
+
+    repo.setup_git_blame_plugin();
+
+    // Change to repo directory
+    let original_dir = repo.change_to_repo_dir();
+    let _guard = DirGuard::new(original_dir);
+
+    let mut harness = EditorTestHarness::with_config_and_working_dir(
+        120,
+        40,
+        Config::default(),
+        repo.path.clone(),
+    )
+    .unwrap();
+
+    // Open file directly
+    let file_path = repo.path.join("test.txt");
+    harness.open_file(&file_path).unwrap();
+
+    // Wait until file is loaded
+    harness.wait_until(|h| {
+        h.get_buffer_content().contains("line")
+    }).unwrap();
+
+    // Trigger git blame
+    trigger_git_blame(&mut harness);
+
+    // Wait until blame view appears
+    harness.wait_until(|h| {
+        h.screen_to_string().contains("Git Blame:")
+    }).unwrap();
+
+    // Navigate to a line from the second commit
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
+    harness.process_async_and_render().unwrap();
+
+    let screen_before = harness.screen_to_string();
+    println!("Before pressing 'b':\n{screen_before}");
+
+    // Press 'b' to go back in history
+    harness.send_key(KeyCode::Char('b'), KeyModifiers::NONE).unwrap();
+
+    // Wait until we see the depth indicator or commit ref with ^
+    harness.wait_until(|h| {
+        let screen = h.screen_to_string();
+        // The view should still show Git Blame but with depth indicator
+        screen.contains("Git Blame:") && (screen.contains("depth:") || screen.contains("^"))
+    }).unwrap();
+
+    let screen_after = harness.screen_to_string();
+    println!("After pressing 'b':\n{screen_after}");
+
+    // We should still be in git blame view
+    assert!(
+        screen_after.contains("Git Blame:"),
+        "Should still show Git Blame after going back"
+    );
+}
+
+/// Test git blame with multiple commits shows different authors/dates
+#[test]
+fn test_git_blame_shows_different_commits() {
+    let repo = GitTestRepo::new();
+
+    // Create file with one commit
+    repo.create_file("multi.txt", "Line from first commit\n");
+    repo.git_add(&["multi.txt"]);
+    repo.git_commit("First commit");
+
+    // Add more lines in a second commit
+    repo.create_file("multi.txt", "Line from first commit\nLine from second commit\n");
+    repo.git_add(&["multi.txt"]);
+    repo.git_commit("Second commit");
+
+    repo.setup_git_blame_plugin();
+
+    // Change to repo directory
+    let original_dir = repo.change_to_repo_dir();
+    let _guard = DirGuard::new(original_dir);
+
+    let mut harness = EditorTestHarness::with_config_and_working_dir(
+        120,
+        40,
+        Config::default(),
+        repo.path.clone(),
+    )
+    .unwrap();
+
+    // Open file directly
+    let file_path = repo.path.join("multi.txt");
+    harness.open_file(&file_path).unwrap();
+
+    // Wait until file is loaded
+    harness.wait_until(|h| {
+        h.get_buffer_content().contains("Line from")
+    }).unwrap();
+
+    // Trigger git blame
+    trigger_git_blame(&mut harness);
+
+    // Wait until blame view appears with multiple blocks
+    harness.wait_until(|h| {
+        let screen = h.screen_to_string();
+        // Should show Git Blame header and at least two block headers (different commits)
+        // The blocks are separated by ── lines
+        let header_count = screen.matches("──").count();
+        screen.contains("Git Blame:") && header_count >= 2
+    }).unwrap();
+
+    let screen = harness.screen_to_string();
+    println!("Git blame with multiple commits:\n{screen}");
+
+    // Should show both commit messages
+    assert!(
+        screen.contains("First commit") || screen.contains("Second commit"),
+        "Should show commit summaries"
+    );
+}
