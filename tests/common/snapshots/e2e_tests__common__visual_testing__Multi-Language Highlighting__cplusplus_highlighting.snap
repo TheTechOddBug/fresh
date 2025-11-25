@@ -15,19 +15,19 @@ expression: "&screen_text"
     9 │     greet("World");                                                    █
    10 │     return 0;                                                          █
    11 │ }                                                                      █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
-                                                                               █
+   12 │                                                                        █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
+~                                                                              █
 hello.cpp | Ln 0, Col 0 | Opened hello.cpp                      Palette: Ctrl+P
