@@ -63,21 +63,347 @@ This data structure provides several key advantages:
 
 ## The Rendering Pipeline
 
-The rendering pipeline is designed to be as efficient as possible, especially when it comes to overlays (visual decorations like highlights and squiggly lines).
+The rendering pipeline transforms source bytes into styled terminal output through a series of well-defined stages. Each stage preserves source-byte mappings for cursor positioning, and plugins can intercept the pipeline at multiple points.
 
-### The Overlay Problem
+### Complete Data Flow
 
-A naive implementation of overlays, where each character on the screen is checked against a list of all active overlays, can lead to significant performance problems. This is an O(N*M) problem, where N is the number of characters on the screen and M is the number of overlays.
+```mermaid
+flowchart TD
+    subgraph Storage["1. Storage Layer"]
+        FILE[Source File bytes]
+        FILE --> TB[TextBuffer::load_from_file]
+        TB --> PT[PieceTree + Vec‹StringBuffer›]
+    end
 
-### The Solution: A High-Performance Overlay System
+    subgraph Viewport["2. Viewport Calculation"]
+        PT --> VP[Viewport.top_byte]
+        VP --> VR[Visible byte range]
+    end
 
-Fresh uses a multi-pronged approach to solve the overlay problem:
+    subgraph Tokenization["3. Tokenization"]
+        VR --> BT[build_base_tokens]
+        BT --> VTW[Vec‹ViewTokenWire›]
+    end
 
-1.  **Line-Indexed Overlay Storage:** Instead of storing overlays in a flat list, they are stored in a `BTreeMap<usize, Vec<Overlay>>`, where the key is the starting line number of the overlay. This allows for a very fast lookup of all overlays on a given line.
-2.  **Render-Time Overlay Cache:** During each frame, the editor creates a cache of all overlays that are visible in the current viewport. This cache is then used to apply the overlays to the text, avoiding the need to query the overlay manager for each character.
-3.  **Diagnostic Hash Check:** For LSP diagnostics, which are a major source of overlays, Fresh uses a hash check to avoid redundant updates. If the set of diagnostics from the language server hasn't changed, no work is done.
+    subgraph PluginTransform["4. Plugin Transform"]
+        VTW --> HOOK{view_transform_request hook}
+        HOOK -->|Plugin responds| SVT[SubmitViewTransform]
+        SVT --> TVT[Transformed tokens]
+        HOOK -->|No plugin| TVT
+    end
 
-This new architecture, which is currently being implemented, will provide a massive performance improvement over the old system and will allow Fresh to handle thousands of overlays without breaking a sweat.
+    subgraph ViewLines["5. ViewLine Generation"]
+        TVT --> WRAP{Line wrapping?}
+        WRAP -->|Yes| WRP[apply_wrapping_transform]
+        WRAP -->|No| VLI
+        WRP --> VLI[ViewLineIterator]
+        VLI --> VL[Vec‹ViewLine›]
+    end
+
+    subgraph Styling["6. Styling Layers"]
+        VL --> TS[Token styles]
+        TS --> ANSI[ANSI escape parsing]
+        ANSI --> SYN[Syntax highlighting]
+        SYN --> SEM[Semantic highlighting]
+        SEM --> SEL[Selection ranges]
+        SEL --> OVL[Overlays]
+        OVL --> STYLED[Styled characters]
+    end
+
+    subgraph Output["7. Ratatui Output"]
+        STYLED --> SPANS[Vec‹Line‹Span››]
+        SPANS --> PARA[Paragraph widget]
+        PARA --> FRAME[frame.render_widget]
+        FRAME --> TERM[Terminal]
+    end
+```
+
+### Stage 1: Source Storage
+
+Source bytes are stored in a `PieceTree` (`src/piece_tree.rs`), a balanced tree of pieces referencing either the original file or an append-only buffer of edits.
+
+| File Size | Storage Strategy | Line Indexing |
+|-----------|-----------------|---------------|
+| < 100MB | `BufferData::Loaded { data, line_starts }` | Full index available |
+| ≥ 100MB | `BufferData::Unloaded { file_path, file_offset, bytes }` | Lazy chunk loading |
+
+**Key files:** `src/text_buffer.rs:141-149`, `src/piece_tree.rs:12-36`
+
+### Stage 2: Viewport Calculation
+
+The `Viewport` (`src/viewport.rs`) determines which bytes are visible:
+
+```rust
+Viewport {
+    top_byte: usize,      // Authoritative scroll position
+    left_column: usize,   // Horizontal scroll
+    width: u16,
+    height: u16,
+}
+```
+
+`top_byte` is the anchor—line boundaries are discovered by scanning backward. This works even for files without line indexing.
+
+**Key file:** `src/viewport.rs:94-104`
+
+### Stage 3: Tokenization
+
+`build_base_tokens()` converts visible bytes into a stream of `ViewTokenWire`:
+
+```rust
+pub struct ViewTokenWire {
+    pub source_offset: Option<usize>,  // Maps back to source byte
+    pub kind: ViewTokenWireKind,       // Text | Newline | Space | Break
+    pub style: Option<ViewTokenStyle>, // For injected content
+}
+```
+
+The `source_offset` field is critical—it enables cursor positioning and determines whether syntax highlighting applies.
+
+**Key file:** `src/ui/split_rendering.rs:581-654`
+
+### Stage 4: Plugin View Transform
+
+Plugins can intercept and transform the token stream before it becomes display lines.
+
+```mermaid
+sequenceDiagram
+    participant R as Renderer
+    participant H as Hook System
+    participant P as Plugin
+    participant S as SplitViewState
+
+    R->>H: Fire view_transform_request
+    H->>P: Send buffer_id, viewport, base tokens
+    P->>P: Transform tokens (inject headers, reorder, etc.)
+    P->>S: SubmitViewTransform(transformed tokens)
+    R->>S: Read view_transform
+    R->>R: Use transformed tokens for rendering
+```
+
+**Hook:** `view_transform_request` (`src/editor/render.rs:113-135`)
+
+**Plugin command:** `PluginCommand::SubmitViewTransform` (`src/plugin_api.rs:259-264`)
+
+**Token semantics:**
+- `source_offset: Some(n)` → Source content, syntax highlighting applied
+- `source_offset: None` → Injected by plugin, uses `style` field instead
+
+**Use cases:** Git blame annotations, markdown soft breaks, interleaved views, code coverage headers.
+
+### Stage 5: ViewLine Generation
+
+`ViewLineIterator` (`src/ui/view_pipeline.rs`) converts tokens into display lines:
+
+```rust
+pub struct ViewLine {
+    pub text: String,                       // Tabs expanded to spaces
+    pub char_mappings: Vec<Option<usize>>,  // Display char → source byte
+    pub char_styles: Vec<Option<ViewTokenStyle>>,
+    pub tab_starts: HashSet<usize>,
+    pub line_start: LineStart,              // Source | Injected | Wrapped
+}
+```
+
+**Tab expansion:** `'\t'` → `(8 - (col % 8))` spaces, each mapped to the original tab byte.
+
+**Line classification:** `LineStart::AfterInjectedNewline` distinguishes plugin-injected lines (no line number shown) from source lines.
+
+**Key file:** `src/ui/view_pipeline.rs:72-74`
+
+### Stage 6: Styling Layers
+
+Multiple styling systems are applied per character, in order:
+
+```mermaid
+flowchart LR
+    subgraph Layers["Styling Priority (low → high)"]
+        direction LR
+        A[Token style] --> B[ANSI escapes]
+        B --> C[Syntax highlighting]
+        C --> D[Semantic highlighting]
+        D --> E[Selection]
+        E --> F[Overlays]
+    end
+```
+
+| Layer | Source | Applies To |
+|-------|--------|-----------|
+| Token style | `ViewTokenWire.style` | Injected content (`source_offset: None`) |
+| ANSI escapes | `AnsiParser::parse_char()` | Content with escape sequences |
+| Syntax | Tree-sitter (`src/highlighter.rs`) | Source content only |
+| Semantic | Word occurrence matching | Matching identifiers |
+| Selection | Cursor ranges | Selected text |
+| Overlays | `OverlayManager` | Diagnostics, search hits |
+
+**Key file:** `src/ui/split_rendering.rs:1005-1720`
+
+### Stage 7: Ratatui Output
+
+Styled characters are accumulated into ratatui `Span`s, grouped into `Line`s:
+
+```rust
+// Final structure
+Vec<Line> {
+    Line {
+        spans: Vec<Span> {
+            Span { content: String, style: Style }
+        }
+    }
+}
+
+// Handoff to ratatui
+frame.render_widget(Clear, render_area);
+frame.render_widget(Paragraph::new(lines), render_area);
+frame.set_cursor_position((cursor_x, cursor_y));
+```
+
+**Key file:** `src/ui/split_rendering.rs:1926-1930`
+
+### Plugin Integration Points
+
+Fresh provides three independent mechanisms for plugins to affect rendering:
+
+```mermaid
+flowchart TB
+    subgraph Mechanisms["Plugin Rendering Mechanisms"]
+        VT[View Transform<br/>Token stream modification]
+        VTX[Virtual Text<br/>Inline insertions]
+        OV[Overlays<br/>Range decorations]
+    end
+
+    subgraph UseCases["Use Cases"]
+        VT --> UC1[Git blame headers]
+        VT --> UC2[Interleaved views]
+        VT --> UC3[Semantic reordering]
+
+        VTX --> UC4[Type hints]
+        VTX --> UC5[Parameter hints]
+        VTX --> UC6[Color swatches]
+
+        OV --> UC7[Diagnostics]
+        OV --> UC8[Search highlights]
+        OV --> UC9[Lint underlines]
+    end
+```
+
+#### View Transform (`PluginCommand::SubmitViewTransform`)
+
+Modifies the entire token stream. Can inject lines, reorder content, or transform existing tokens.
+
+```rust
+PluginCommand::SubmitViewTransform {
+    buffer_id,
+    split_id,
+    payload: ViewTransformPayload {
+        range: Range<usize>,
+        tokens: Vec<ViewTokenWire>,
+        layout_hints: Option<LayoutHints>,
+    },
+}
+```
+
+**Key file:** `src/plugin_api.rs:122-130`
+
+#### Virtual Text (`PluginCommand::AddVirtualText`)
+
+Inserts styled text at specific positions. Uses markers for auto-adjustment on edits.
+
+```rust
+PluginCommand::AddVirtualText {
+    buffer_id,
+    virtual_text_id: String,
+    position: usize,
+    text: String,
+    color: (u8, u8, u8),
+    before: bool,
+}
+```
+
+**Key file:** `src/virtual_text.rs`
+
+#### Overlays (`PluginCommand::AddOverlay`)
+
+Applies decorations to byte ranges. Stored in `BTreeMap<usize, Vec<Overlay>>` for O(log n) lookup.
+
+```rust
+PluginCommand::AddOverlay {
+    buffer_id,
+    namespace: Option<OverlayNamespace>,
+    range: Range<usize>,
+    color: (u8, u8, u8),
+    underline: bool,
+    bold: bool,
+    italic: bool,
+} -> OverlayHandle
+```
+
+**Performance optimizations:**
+1. **Line-indexed storage:** Overlays keyed by starting line for fast viewport filtering
+2. **Render-time cache:** Visible overlays cached per frame
+3. **Diagnostic hash check:** LSP diagnostics skip update if unchanged
+
+**Key file:** `src/overlay.rs`
+
+### Per-Split View State
+
+Each split maintains independent view state, enabling different presentations of the same buffer:
+
+```rust
+pub struct SplitViewState {
+    pub view_transform: Option<ViewTransformPayload>,
+    pub compose_width: Option<u16>,
+    pub compose_column_guides: Option<Vec<u16>>,
+    pub layout: Option<Layout>,
+    pub layout_dirty: bool,
+}
+```
+
+**Example:** Split A shows normal view, Split B shows git blame—same buffer, different transforms.
+
+**Key file:** `src/split.rs:60-105`
+
+### Render Phase Hook Sequence
+
+```mermaid
+sequenceDiagram
+    participant E as Editor
+    participant B as Buffer
+    participant H as Hooks
+    participant P as Plugins
+    participant R as SplitRenderer
+
+    E->>B: prepare_for_render() (lazy load chunks)
+
+    loop For each visible buffer
+        E->>H: Fire render_start
+        E->>B: build_base_tokens()
+        E->>H: Fire view_transform_request
+        H->>P: Plugin transforms tokens
+        P->>E: SubmitViewTransform
+        E->>H: Fire lines_changed (new visible lines)
+        H->>P: Plugin adds overlays
+    end
+
+    E->>E: Process queued PluginCommands
+    E->>R: render_buffer_in_split()
+    R->>R: Apply view_transform if present
+    R->>R: Build ViewLines, apply styling
+    R->>R: Render to ratatui
+```
+
+**Key file:** `src/editor/render.rs:97-201`
+
+### Performance Characteristics
+
+| Operation | Complexity | Notes |
+|-----------|-----------|-------|
+| File load (small) | O(n) | Full line indexing |
+| File load (large) | O(1) | Lazy, viewport-only |
+| Viewport scroll | O(log n) | Binary search for line boundary |
+| Syntax highlighting | O(viewport) | Tree-sitter parses visible lines only |
+| Overlay lookup | O(log n + k) | n = total overlays, k = visible |
+| Render frame | O(height) | Independent of file size |
 
 ## LSP Integration
 
