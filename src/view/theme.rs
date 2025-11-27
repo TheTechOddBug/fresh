@@ -116,6 +116,8 @@ struct UiColors {
     help_separator_fg: ColorDef,
     help_indicator_fg: ColorDef,
     help_indicator_bg: ColorDef,
+    #[serde(default = "default_inline_code_bg")]
+    inline_code_bg: ColorDef,
     split_separator_fg: ColorDef,
     #[serde(default = "default_split_separator_hover_fg")]
     split_separator_hover_fg: ColorDef,
@@ -169,6 +171,9 @@ fn default_menu_hover_bg() -> ColorDef {
 }
 fn default_menu_hover_fg() -> ColorDef {
     ColorDef::Rgb(255, 255, 255)
+}
+fn default_inline_code_bg() -> ColorDef {
+    ColorDef::Named("DarkGray".to_string())
 }
 fn default_split_separator_hover_fg() -> ColorDef {
     ColorDef::Rgb(100, 149, 237) // Cornflower blue for visibility
@@ -283,6 +288,9 @@ pub struct Theme {
     pub help_indicator_fg: Color,
     pub help_indicator_bg: Color,
 
+    /// Background color for inline code in help popups
+    pub inline_code_bg: Color,
+
     pub split_separator_fg: Color,
     pub split_separator_hover_fg: Color,
 
@@ -370,6 +378,7 @@ impl From<ThemeFile> for Theme {
             help_separator_fg: file.ui.help_separator_fg.into(),
             help_indicator_fg: file.ui.help_indicator_fg.into(),
             help_indicator_bg: file.ui.help_indicator_bg.into(),
+            inline_code_bg: file.ui.inline_code_bg.into(),
             split_separator_fg: file.ui.split_separator_fg.into(),
             split_separator_hover_fg: file.ui.split_separator_hover_fg.into(),
             scrollbar_track_fg: file.ui.scrollbar_track_fg.into(),
@@ -488,6 +497,8 @@ impl Theme {
             help_indicator_fg: Color::Red,
             help_indicator_bg: Color::Black,
 
+            inline_code_bg: Color::Rgb(60, 60, 60), // Dark gray for code blocks
+
             split_separator_fg: Color::Rgb(100, 100, 100),
             split_separator_hover_fg: Color::Rgb(100, 149, 237), // Cornflower blue
 
@@ -551,34 +562,34 @@ impl Theme {
             tab_inactive_bg: Color::Rgb(230, 230, 230),
             tab_separator_bg: Color::Rgb(200, 200, 200),
 
-            // Menu bar colors
-            menu_bg: Color::Rgb(240, 240, 240),
-            menu_fg: Color::Rgb(40, 40, 40),
-            menu_active_bg: Color::Rgb(200, 200, 200),
+            // Menu bar colors - dark text on light backgrounds
+            menu_bg: Color::Rgb(245, 245, 245),
+            menu_fg: Color::Rgb(30, 30, 30),
+            menu_active_bg: Color::Rgb(225, 225, 225),
             menu_active_fg: Color::Rgb(0, 0, 0),
-            menu_dropdown_bg: Color::Rgb(250, 250, 250),
-            menu_dropdown_fg: Color::Rgb(40, 40, 40),
-            menu_highlight_bg: Color::Rgb(70, 130, 180),
-            menu_highlight_fg: Color::Rgb(255, 255, 255),
-            menu_border_fg: Color::Rgb(150, 150, 150),
-            menu_separator_fg: Color::Rgb(200, 200, 200),
-            menu_hover_bg: Color::Rgb(220, 220, 220),
+            menu_dropdown_bg: Color::Rgb(248, 248, 248),
+            menu_dropdown_fg: Color::Rgb(30, 30, 30),
+            menu_highlight_bg: Color::Rgb(209, 226, 243), // Light blue highlight
+            menu_highlight_fg: Color::Rgb(0, 0, 0),       // Dark text on light highlight
+            menu_border_fg: Color::Rgb(180, 180, 180),
+            menu_separator_fg: Color::Rgb(210, 210, 210),
+            menu_hover_bg: Color::Rgb(230, 235, 240),
             menu_hover_fg: Color::Rgb(0, 0, 0),
 
-            status_bar_fg: Color::Rgb(40, 40, 40),
-            status_bar_bg: Color::Rgb(230, 230, 230),
-            prompt_fg: Color::Rgb(40, 40, 40),
-            prompt_bg: Color::Rgb(250, 250, 250),
+            status_bar_fg: Color::Rgb(60, 60, 60),
+            status_bar_bg: Color::Rgb(240, 240, 240),
+            prompt_fg: Color::Rgb(80, 80, 80),        // Light gray text
+            prompt_bg: Color::Rgb(255, 255, 255),     // White background
             prompt_selection_fg: Color::Black,
             prompt_selection_bg: Color::Rgb(173, 214, 255), // Light blue selection
 
-            popup_border_fg: Color::DarkGray,
-            popup_bg: Color::Rgb(255, 255, 255),
-            popup_selection_bg: Color::Rgb(173, 214, 255),
-            popup_text_fg: Color::Black,
+            popup_border_fg: Color::Rgb(180, 180, 180),
+            popup_bg: Color::Rgb(232, 238, 245),      // Light blue-gray
+            popup_selection_bg: Color::Rgb(209, 226, 243),
+            popup_text_fg: Color::Rgb(30, 30, 30),
 
-            suggestion_bg: Color::Rgb(255, 255, 255),
-            suggestion_selected_bg: Color::Rgb(173, 214, 255),
+            suggestion_bg: Color::Rgb(232, 238, 245), // Light blue-gray
+            suggestion_selected_bg: Color::Rgb(209, 226, 243),
 
             help_bg: Color::White,
             help_fg: Color::Black,
@@ -587,6 +598,8 @@ impl Theme {
 
             help_indicator_fg: Color::Red,
             help_indicator_bg: Color::White,
+
+            inline_code_bg: Color::Rgb(230, 230, 235), // Light gray for code blocks
 
             split_separator_fg: Color::Rgb(140, 140, 140),
             split_separator_hover_fg: Color::Rgb(70, 130, 180), // Steel blue
@@ -687,6 +700,8 @@ impl Theme {
 
             help_indicator_fg: Color::Red,
             help_indicator_bg: Color::Black,
+
+            inline_code_bg: Color::Rgb(40, 40, 40), // Dark gray for code blocks
 
             split_separator_fg: Color::Rgb(140, 140, 140),
             split_separator_hover_fg: Color::Yellow,
@@ -811,6 +826,8 @@ impl Theme {
 
             help_indicator_fg: Color::Rgb(255, 85, 85),
             help_indicator_bg: Color::Rgb(0, 0, 170),
+
+            inline_code_bg: Color::Rgb(0, 0, 85), // Darker blue for code blocks
 
             split_separator_fg: Color::Rgb(85, 255, 255),
             split_separator_hover_fg: Color::Rgb(255, 255, 255),

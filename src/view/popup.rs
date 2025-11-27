@@ -161,7 +161,7 @@ pub fn parse_markdown(text: &str, theme: &crate::view::theme::Theme) -> Vec<Styl
             }
             Event::Text(text) => {
                 let current_style = if in_code_block {
-                    Style::default().fg(theme.help_key_fg).bg(Color::DarkGray)
+                    Style::default().fg(theme.help_key_fg).bg(theme.inline_code_bg)
                 } else {
                     *style_stack.last().unwrap_or(&Style::default())
                 };
@@ -180,7 +180,7 @@ pub fn parse_markdown(text: &str, theme: &crate::view::theme::Theme) -> Vec<Styl
             }
             Event::Code(code) => {
                 // Inline code
-                let style = Style::default().fg(theme.help_key_fg).bg(Color::DarkGray);
+                let style = Style::default().fg(theme.help_key_fg).bg(theme.inline_code_bg);
                 if let Some(line) = lines.last_mut() {
                     line.push(format!("`{}`", code), style);
                 }

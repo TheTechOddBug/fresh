@@ -92,7 +92,8 @@ impl FileExplorerRenderer {
                     .borders(Borders::ALL)
                     .title(title)
                     .title_style(title_style)
-                    .border_style(border_style),
+                    .border_style(border_style)
+                    .style(Style::default().bg(theme.editor_bg)),
             )
             .highlight_style(if is_focused {
                 Style::default().bg(theme.selection_bg).fg(theme.editor_fg)
@@ -222,7 +223,7 @@ impl FileExplorerRenderer {
             ));
         }
 
-        ListItem::new(Line::from(spans))
+        ListItem::new(Line::from(spans)).style(Style::default().bg(theme.editor_bg))
     }
 
     /// Format file size for display

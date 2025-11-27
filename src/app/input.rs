@@ -229,11 +229,13 @@ impl Editor {
                         // Suggestions exist: navigate suggestions
                         if let Some(selected) = prompt.selected_suggestion {
                             // Don't wrap around - stay at 0 if already at the beginning
-                            prompt.selected_suggestion = if selected == 0 {
-                                Some(0)
-                            } else {
-                                Some(selected - 1)
-                            };
+                            let new_selected = if selected == 0 { 0 } else { selected - 1 };
+                            prompt.selected_suggestion = Some(new_selected);
+                            // Update input to match selected suggestion
+                            if let Some(suggestion) = prompt.suggestions.get(new_selected) {
+                                prompt.input = suggestion.get_value().to_string();
+                                prompt.cursor_pos = prompt.input.len();
+                            }
                         }
                     } else {
                         // No suggestions: navigate history (Up arrow)
@@ -278,9 +280,13 @@ impl Editor {
                         // Suggestions exist: navigate suggestions
                         if let Some(selected) = prompt.selected_suggestion {
                             // Don't wrap around - stay at the end if already at the last item
-                            let new_pos = selected + 1;
-                            prompt.selected_suggestion =
-                                Some(new_pos.min(prompt.suggestions.len() - 1));
+                            let new_selected = (selected + 1).min(prompt.suggestions.len() - 1);
+                            prompt.selected_suggestion = Some(new_selected);
+                            // Update input to match selected suggestion
+                            if let Some(suggestion) = prompt.suggestions.get(new_selected) {
+                                prompt.input = suggestion.get_value().to_string();
+                                prompt.cursor_pos = prompt.input.len();
+                            }
                         }
                     } else {
                         // No suggestions: navigate history (Down arrow)
@@ -3333,11 +3339,18 @@ impl Editor {
     /// Start the theme selection prompt with available themes
     fn start_select_theme_prompt(&mut self) {
         let available_themes = crate::view::theme::Theme::available_themes();
+        let current_theme_name = &self.theme.name;
+
+        // Find the index of the current theme
+        let current_index = available_themes
+            .iter()
+            .position(|name| *name == current_theme_name)
+            .unwrap_or(0);
 
         let suggestions: Vec<crate::input::commands::Suggestion> = available_themes
             .iter()
             .map(|theme_name| {
-                let is_current = self.theme.name == *theme_name;
+                let is_current = *theme_name == current_theme_name;
                 crate::input::commands::Suggestion {
                     text: theme_name.to_string(),
                     description: if is_current {
@@ -3360,7 +3373,10 @@ impl Editor {
 
         if let Some(prompt) = self.prompt.as_mut() {
             if !prompt.suggestions.is_empty() {
-                prompt.selected_suggestion = Some(0);
+                prompt.selected_suggestion = Some(current_index);
+                // Also set input to match selected theme
+                prompt.input = current_theme_name.to_string();
+                prompt.cursor_pos = prompt.input.len();
             }
         }
     }

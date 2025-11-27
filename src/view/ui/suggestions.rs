@@ -159,10 +159,10 @@ impl SuggestionsRenderer {
                     base_style
                 } else if is_selected {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.help_key_fg)
                         .bg(theme.suggestion_selected_bg)
                 } else {
-                    Style::default().fg(Color::DarkGray).bg(theme.suggestion_bg)
+                    Style::default().fg(theme.line_number_fg).bg(theme.suggestion_bg)
                 };
 
                 if let Some(keybinding) = &suggestion.keybinding {

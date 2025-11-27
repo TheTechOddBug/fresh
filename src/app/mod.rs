@@ -3120,13 +3120,14 @@ impl Editor {
     pub fn confirm_prompt(&mut self) -> Option<(String, PromptType, Option<usize>)> {
         if let Some(prompt) = self.prompt.take() {
             let selected_index = prompt.selected_suggestion;
-            // For command, file, and LSP stop prompts, prefer the selected suggestion over raw input
+            // For command, file, theme, and LSP stop prompts, prefer the selected suggestion over raw input
             let final_input = if matches!(
                 prompt.prompt_type,
                 PromptType::Command
                     | PromptType::OpenFile
                     | PromptType::SaveFileAs
                     | PromptType::StopLspServer
+                    | PromptType::SelectTheme
             ) {
                 // Use the selected suggestion if any
                 if let Some(selected_idx) = prompt.selected_suggestion {
