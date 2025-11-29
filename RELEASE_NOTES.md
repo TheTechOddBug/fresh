@@ -1,10 +1,30 @@
 ## Release Notes
 
-### v0.1.9 (Unreleased)
+### v0.1.10 (Unreleased)
+
+#### Features
+
+* **Unified Search & Replace**: Replace (Ctrl+H) and Query Replace (Ctrl+Shift+H) now share the same interface with a "Confirm each" toggle (Alt+E). Query Replace enables confirmation by default; Replace uses the toggle state. Confirmation prompt shows `(y)es (n)o (a)ll (c)ancel` options.
+
+#### Bug Fixes
+
+* **macOS Build**: Fixed Linux-specific `.init_array` by using cross-platform V8 initialization.
+
+* **Syntax Highlighting**: Fixed invisible/hard-to-read highlighting in light and nostalgia themes by using theme-based color resolution instead of hardcoded colors.
+
+* **Theme Colors**: Improved status bar and prompt colors across all themes (dark, high-contrast, light, nostalgia).
+
+* **Search Prompt**: Search/replace prompts now cancel when focus leaves the editor (switching buffers or focusing file explorer).
+
+---
+
+### v0.1.9
 
 #### Features
 
 * **Native File Browser**: New built-in file browser for Open File command (Ctrl+O) that works without plugins. Features sortable columns (name, size, modified), navigation shortcuts (parent, home, root), filtering with grayed non-matches, mouse support with hover indicators, and async directory loading.
+
+* **CRLF Line Ending Support**: Transparent handling of Windows-style line endings. Files are detected and normalized internally, then saved with their original line ending format preserved.
 
 * **CLI Enhancements**: Added `--version`, `--no-plugins` (skip JS runtime for faster startup), `--log-file`, and `--config` flags.
 
@@ -18,23 +38,21 @@
 
 * **V8 Segfault**: Fixed crash when creating multiple Editor instances (e.g., in tests) by initializing V8 platform once at library load.
 
+* **Windows**: Fixed duplicate key presses caused by processing both Press and Release events.
+
 ---
 
 ### v0.1.8
 
-#### Features
-
-* **CRLF Line Ending Support**: Transparent handling of Windows-style line endings. Files are detected and normalized internally, then saved with their original line ending format preserved.
-
 #### Bug Fixes
-
-* **Windows**: Fixed duplicate key presses caused by processing both Press and Release events.
 
 * **Open File Prompt**: Fixed completions not showing immediately (issue #193) by enabling ICU support for Unicode functions.
 
 * **Keyboard Shortcuts Help**: Fixed crash when reopening keyboard shortcuts buffer (issue #192).
 
 * **Undo Save Points**: Fixed extra undo step at beginning of save history (issue #191).
+
+* **Scroll Keybindings**: Fixed Ctrl+Up/Down scroll not working by syncing viewport between SplitViewState and EditorState.
 
 ---
 
@@ -54,14 +72,12 @@
 
 * **Mouse Performance**: Fixed slow mouse movement on large terminals by skipping redundant renders when hover target hasn't changed. Added mouse event coalescing to skip stale positions.
 
-* **Scroll Keybindings**: Fixed Ctrl+Up/Down scroll not working by syncing viewport between SplitViewState and EditorState.
-
 * **UTF-8 Truncation**: Fixed panic when truncating suggestion descriptions mid-character.
 
 #### Internal Changes
 
 * **Code Refactoring**: Major cleanup extracting helpers and reducing duplication across many modules including `process_async_messages`, `handle_plugin_command`, `render_view_lines`, `multi_cursor`, `highlight_color`, and more. Consolidated duplicate `hook_args_to_json` implementations.
 
-* **Test Improvements**: Fixed flaky tests by removing timing assertions, made shortcut tests platform-aware for macOS, and moved test plugins from `plugins/` to `tests/plugins/`.
+* **Test Improvements**: Fixed flaky tests by removing timing assertions, made shortcut tests platform-aware for macOS.
 
 * **Documentation**: Reorganized internal planning docs, updated plugin README from Lua to TypeScript, and added embedded help manual using `include_str!()`.
