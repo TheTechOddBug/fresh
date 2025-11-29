@@ -2,6 +2,8 @@
 
 [Visit the official Fresh website](https://sinelaw.github.io/fresh/)
 
+**[📦 Installation Instructions](#installation)**
+
 A terminal-based text editor.
 
 ## Discovery & Ease of Use
