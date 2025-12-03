@@ -189,6 +189,8 @@ fn test_file_explorer_expand_collapse() {
 /// Test opening a file from file explorer
 #[test]
 fn test_file_explorer_open_file() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
     // Create harness with isolated temp project
     let mut harness = EditorTestHarness::with_temp_project(120, 40).unwrap();
     let project_root = harness.project_dir().unwrap();
@@ -197,14 +199,19 @@ fn test_file_explorer_open_file() {
     let test_content = "Hello World";
     fs::write(&test_file, test_content).unwrap();
 
-    // Toggle file explorer on (this initializes it synchronously now)
-    harness.editor_mut().toggle_file_explorer();
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let _ = harness.editor_mut().process_async_messages();
-    harness.render().unwrap();
+    // Toggle file explorer on with Ctrl+E
+    harness
+        .send_key(KeyCode::Char('e'), KeyModifiers::CONTROL)
+        .unwrap();
+    // Wait for file explorer to be visible
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("File Explorer") || screen.contains("[D]")
+        })
+        .unwrap();
 
     let screen_with_explorer = harness.screen_to_string();
-    println!("File explorer visible:\n{screen_with_explorer}");
 
     // Verify file explorer is showing
     assert!(
@@ -212,40 +219,40 @@ fn test_file_explorer_open_file() {
         "File explorer should be visible"
     );
 
-    // Expand root directory to see files (root should be selected by default)
-    harness.editor_mut().file_explorer_toggle_expand();
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    let _ = harness.editor_mut().process_async_messages();
-    harness.render().unwrap();
-
-    let screen_after_expand = harness.screen_to_string();
-    println!("After expand:\n{screen_after_expand}");
+    // The file might already be visible if root auto-expanded (single item case)
+    // If not visible, expand the root directory
+    if !screen_with_explorer.contains("simple.txt") {
+        harness
+            .send_key(KeyCode::Right, KeyModifiers::NONE)
+            .unwrap();
+        // Wait for expansion by checking the screen shows the file
+        harness
+            .wait_until(|h| h.screen_to_string().contains("simple.txt"))
+            .unwrap();
+    }
 
     // Navigate down to the file (first child after root)
-    harness.editor_mut().file_explorer_navigate_down();
+    harness
+        .send_key(KeyCode::Down, KeyModifiers::NONE)
+        .unwrap();
     harness.render().unwrap();
 
-    // Try to open - should work if we're on a file
-    let result = harness.editor_mut().file_explorer_open_file();
+    // Try to open with Enter - should work if we're on a file
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
 
-    // Even if the file wasn't selected (e.g., we're on a directory),
-    // the function should not error
-    assert!(result.is_ok(), "file_explorer_open_file should not error");
+    // Wait for the file to be opened (content should appear)
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Hello World"))
+        .unwrap();
 
-    harness.render().unwrap();
-    let screen_after_open = harness.screen_to_string();
-    println!("After trying to open:\n{screen_after_open}");
-
-    // If a file was opened, buffer should have content
+    // Verify the file was opened
     let buffer_content = harness.get_buffer_content().unwrap();
-    if !buffer_content.is_empty() {
-        // A file was opened - verify it's our test file
-        assert_eq!(
-            buffer_content, test_content,
-            "Buffer should contain the opened file's content"
-        );
-    }
-    // Note: We don't fail the test if no file was opened, as navigation might not land on the file
+    assert_eq!(
+        buffer_content, test_content,
+        "Buffer should contain the opened file's content"
+    );
 }
 
 /// Test file explorer refresh

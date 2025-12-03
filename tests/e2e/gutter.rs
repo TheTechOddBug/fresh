@@ -91,12 +91,44 @@ fn get_displayed_line_number(line: &str) -> Option<usize> {
     num_str.trim().parse().ok()
 }
 
-/// Wait for async operations to complete with multiple render cycles
-fn wait_for_async(harness: &mut EditorTestHarness, iterations: usize) {
-    for _ in 0..iterations {
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        let _ = harness.process_async_and_render();
-    }
+/// Wait for a gutter indicator to appear on any line
+fn wait_for_indicator(harness: &mut EditorTestHarness, symbol: &str) {
+    let symbol = symbol.to_string();
+    harness
+        .wait_until(|h| has_gutter_indicator(&h.screen_to_string(), &symbol))
+        .unwrap();
+}
+
+/// Wait for gutter indicators to disappear completely
+fn wait_for_no_indicators(harness: &mut EditorTestHarness, symbol: &str) {
+    let symbol = symbol.to_string();
+    harness
+        .wait_until(|h| !has_gutter_indicator(&h.screen_to_string(), &symbol))
+        .unwrap();
+}
+
+/// Wait for a specific line to have an indicator (0-indexed relative to content area)
+fn wait_for_indicator_on_line(harness: &mut EditorTestHarness, symbol: &str, line: usize) {
+    let symbol = symbol.to_string();
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            get_indicator_lines(&screen, &symbol).contains(&line)
+        })
+        .unwrap();
+}
+
+/// Wait for content to appear on screen
+fn wait_for_content(harness: &mut EditorTestHarness, content: &str) {
+    let content = content.to_string();
+    harness
+        .wait_until(|h| h.screen_to_string().contains(&content))
+        .unwrap();
+}
+
+/// Process async operations once (single iteration, no sleep)
+fn process_async_once(harness: &mut EditorTestHarness) {
+    let _ = harness.process_async_and_render();
 }
 
 /// Trigger the Git Gutter Refresh command via command palette
@@ -116,13 +148,16 @@ fn trigger_git_gutter_refresh(harness: &mut EditorTestHarness) {
 fn open_file(harness: &mut EditorTestHarness, repo_path: &std::path::Path, relative_path: &str) {
     let full_path = repo_path.join(relative_path);
     harness.open_file(&full_path).unwrap();
-    // Wait for plugins to process async operations (git commands take time)
-    // We need to let the async git diff run and process results
-    for _ in 0..10 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        // Process any pending async messages (plugin commands from git diff)
-        harness.process_async_and_render().unwrap();
-    }
+    // Wait for the file content to be visible on screen
+    // This ensures the file is loaded and rendered
+    harness
+        .wait_until(|h| {
+            // Check that we're no longer showing the empty scratch buffer
+            let screen = h.screen_to_string();
+            // The tab should show the filename
+            screen.contains(relative_path)
+        })
+        .unwrap();
 }
 
 /// Save the current file
@@ -130,10 +165,8 @@ fn save_file(harness: &mut EditorTestHarness) {
     harness
         .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
         .unwrap();
-    harness.render().unwrap();
-    // Wait for save and plugin updates
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    harness.render().unwrap();
+    // Process any resulting async operations
+    process_async_once(harness);
 }
 
 // =============================================================================
@@ -773,7 +806,9 @@ line 5: unchanged
 
     // Manually trigger git gutter refresh to ensure it runs
     trigger_git_gutter_refresh(&mut harness);
-    wait_for_async(&mut harness, 20);
+
+    // Wait for git gutter indicator to appear on line 2 (0-indexed, which is line 3 in the file)
+    wait_for_indicator_on_line(&mut harness, "│", 2);
 
     let screen = harness.screen_to_string();
     println!("=== After opening modified file ===\n{}", screen);
@@ -781,21 +816,6 @@ line 5: unchanged
     // STEP 1: Verify git gutter shows indicator on the modified line (line 3, 0-indexed = line 2)
     let indicator_lines = get_indicator_lines(&screen, "│");
     println!("Indicator lines after open: {:?}", indicator_lines);
-
-    // The modified line should have an indicator
-    // Note: Line 3 in the file is displayed at content line index 2 (0-indexed)
-    let has_indicator_on_line_3 = indicator_lines.contains(&2);
-
-    if !has_indicator_on_line_3 && indicator_lines.is_empty() {
-        // If no indicators, the git diff might not have completed - try again
-        println!("No indicators found, waiting more...");
-        wait_for_async(&mut harness, 30);
-        trigger_git_gutter_refresh(&mut harness);
-        wait_for_async(&mut harness, 30);
-
-        let screen = harness.screen_to_string();
-        println!("=== After additional wait ===\n{}", screen);
-    }
 
     // STEP 2: Now make an in-editor change - insert a newline before line 3
     // First, go to the beginning of line 3
@@ -817,7 +837,8 @@ line 5: unchanged
     harness.type_text("NEW LINE INSERTED\n").unwrap();
     harness.render().unwrap();
 
-    wait_for_async(&mut harness, 10);
+    // Wait for indicator to appear on the newly inserted line (now at index 2)
+    wait_for_indicator_on_line(&mut harness, "│", 2);
 
     let screen_after_insert = harness.screen_to_string();
     println!("=== After inserting new line ===\n{}", screen_after_insert);
@@ -841,11 +862,12 @@ line 5: unchanged
 
     // STEP 4: Save the file and verify git indicators update
     save_file(&mut harness);
-    wait_for_async(&mut harness, 20);
 
     // Trigger git gutter refresh after save
     trigger_git_gutter_refresh(&mut harness);
-    wait_for_async(&mut harness, 20);
+
+    // Wait for indicators to update (should still have git indicators after save)
+    wait_for_indicator(&mut harness, "│");
 
     let screen_after_save = harness.screen_to_string();
     println!("=== After save ===\n{}", screen_after_save);
@@ -908,7 +930,6 @@ fn test_unsaved_changes_get_indicators() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
 
     let screen_before = harness.screen_to_string();
     let indicators_before = count_gutter_indicators(&screen_before, "│");
@@ -920,7 +941,9 @@ fn test_unsaved_changes_get_indicators() {
     harness.send_key(KeyCode::End, KeyModifiers::NONE).unwrap(); // Go to end of line
     harness.type_text(" MODIFIED").unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+
+    // Wait for indicator to appear on the edited line (line 1, 0-indexed)
+    wait_for_indicator_on_line(&mut harness, "│", 1);
 
     let screen_after = harness.screen_to_string();
     let indicators_after = count_gutter_indicators(&screen_after, "│");
@@ -937,7 +960,9 @@ fn test_unsaved_changes_get_indicators() {
 
     // Save and verify indicators clear
     save_file(&mut harness);
-    wait_for_async(&mut harness, 10);
+
+    // Wait for buffer modified indicators to clear after save
+    wait_for_no_indicators(&mut harness, "│");
 
     let screen_after_save = harness.screen_to_string();
     let indicators_after_save = count_gutter_indicators(&screen_after_save, "│");
@@ -978,14 +1003,14 @@ fn test_buffer_modified_clears_after_undo_on_same_line() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
+    process_async_once(&mut harness);
 
     // Move to line 1, append text
     harness.send_key(KeyCode::Home, KeyModifiers::NONE).unwrap();
     harness.send_key(KeyCode::End, KeyModifiers::NONE).unwrap();
     harness.type_text(" MOD").unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_indicator_on_line(&mut harness, "│", 0);
 
     let screen_after = harness.screen_to_string();
     let indicators_after = get_indicator_lines(&screen_after, "│");
@@ -1004,7 +1029,7 @@ fn test_buffer_modified_clears_after_undo_on_same_line() {
             .unwrap();
     }
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_no_indicators(&mut harness, "│");
 
     let screen_after_undo = harness.screen_to_string();
     let indicators_after_undo = get_indicator_lines(&screen_after_undo, "│");
@@ -1040,7 +1065,7 @@ fn test_buffer_modified_single_line_in_multi_line_file() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
+    process_async_once(&mut harness);
 
     // Move to line 10 (0-based index 9) and edit it
     for _ in 0..9 {
@@ -1049,7 +1074,7 @@ fn test_buffer_modified_single_line_in_multi_line_file() {
     harness.send_key(KeyCode::End, KeyModifiers::NONE).unwrap();
     harness.type_text(" MOD").unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_indicator_on_line(&mut harness, "│", 9);
 
     let screen_after = harness.screen_to_string();
     let indicators_after = get_indicator_lines(&screen_after, "│");
@@ -1068,7 +1093,7 @@ fn test_buffer_modified_single_line_in_multi_line_file() {
             .unwrap();
     }
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_no_indicators(&mut harness, "│");
 
     let screen_after_undo = harness.screen_to_string();
     let indicators_after_undo = get_indicator_lines(&screen_after_undo, "│");
@@ -1104,7 +1129,7 @@ fn test_buffer_modified_newline_insert_only_marks_affected_lines() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
+    process_async_once(&mut harness);
 
     // Go to end of line 2 and insert a newline (creating a new empty line)
     harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap(); // line 2
@@ -1113,7 +1138,7 @@ fn test_buffer_modified_newline_insert_only_marks_affected_lines() {
         .send_key(KeyCode::Enter, KeyModifiers::NONE)
         .unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_indicator(&mut harness, "│");
 
     let screen = harness.screen_to_string();
     let indicators = get_indicator_lines(&screen, "│");
@@ -1160,7 +1185,7 @@ fn test_buffer_modified_clears_after_manual_delete_restores_content() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
+    process_async_once(&mut harness);
 
     // Go to line 3, end of line, add text
     harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
@@ -1168,7 +1193,7 @@ fn test_buffer_modified_clears_after_manual_delete_restores_content() {
     harness.send_key(KeyCode::End, KeyModifiers::NONE).unwrap();
     harness.type_text(" ADDED").unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_indicator_on_line(&mut harness, "│", 2);
 
     let screen_after_add = harness.screen_to_string();
     let indicators_after_add = get_indicator_lines(&screen_after_add, "│");
@@ -1186,7 +1211,7 @@ fn test_buffer_modified_clears_after_manual_delete_restores_content() {
             .unwrap();
     }
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_no_indicators(&mut harness, "│");
 
     let screen_after_delete = harness.screen_to_string();
     let indicators_after_delete = get_indicator_lines(&screen_after_delete, "│");
@@ -1223,7 +1248,7 @@ fn test_buffer_modified_clears_after_paste_restores_content() {
     .unwrap();
 
     open_file(&mut harness, &repo.path, "test.txt");
-    wait_for_async(&mut harness, 10);
+    process_async_once(&mut harness);
 
     // Select "world", cut it (Ctrl+X cuts and copies)
     // Go to position of 'w' in "world"
@@ -1245,7 +1270,7 @@ fn test_buffer_modified_clears_after_paste_restores_content() {
         .send_key(KeyCode::Char('x'), KeyModifiers::CONTROL)
         .unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_indicator(&mut harness, "│");
 
     let screen_after_cut = harness.screen_to_string();
     let indicators_after_cut = get_indicator_lines(&screen_after_cut, "│");
@@ -1260,7 +1285,7 @@ fn test_buffer_modified_clears_after_paste_restores_content() {
         .send_key(KeyCode::Char('v'), KeyModifiers::CONTROL)
         .unwrap();
     harness.render().unwrap();
-    wait_for_async(&mut harness, 10);
+    wait_for_no_indicators(&mut harness, "│");
 
     let screen_after_paste = harness.screen_to_string();
     let indicators_after_paste = get_indicator_lines(&screen_after_paste, "│");
@@ -1301,7 +1326,7 @@ fn test_indicator_line_shifting() {
 
     open_file(&mut harness, &repo.path, "test.txt");
     trigger_git_gutter_refresh(&mut harness);
-    wait_for_async(&mut harness, 20);
+    wait_for_indicator(&mut harness, "│");
 
     let screen_initial = harness.screen_to_string();
     let lines_initial = get_indicator_lines(&screen_initial, "│");
@@ -1325,7 +1350,8 @@ fn test_indicator_line_shifting() {
     // Save so git diff can see the changes
     save_file(&mut harness);
     trigger_git_gutter_refresh(&mut harness);
-    wait_for_async(&mut harness, 20);
+    // Wait for indicators to appear (the inserted lines should show as added)
+    wait_for_indicator(&mut harness, "│");
 
     let screen_after = harness.screen_to_string();
     let lines_after = get_indicator_lines(&screen_after, "│");
