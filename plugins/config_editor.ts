@@ -986,10 +986,10 @@ function buildDisplayEntries(): TextPropertyEntry[] {
     const desc = field.schema.description;
     if (desc && desc !== field.name && !desc.startsWith("Item ")) {
       const descIndent = indent + "  ";
-      // Split on newlines and indent each line
+      // Split on newlines and indent each line, prefix with // to indicate comment
       for (const line of desc.split("\n")) {
         entries.push({
-          text: `${descIndent}${line}\n`,
+          text: `${descIndent}// ${line}\n`,
           properties: { type: "description", path: field.path },
         });
       }
@@ -1027,6 +1027,12 @@ function buildDisplayEntries(): TextPropertyEntry[] {
         },
       });
     }
+
+    // Add empty line after each field for readability
+    entries.push({
+      text: "\n",
+      properties: { type: "blank" },
+    });
   }
 
   // Footer with help
@@ -1052,7 +1058,6 @@ function buildDisplayEntries(): TextPropertyEntry[] {
 
 /**
  * Apply syntax highlighting to the config editor buffer
- * Uses simple line-based coloring to avoid byte offset issues with multi-byte chars
  */
 function applyHighlighting(): void {
   if (state.bufferId === null) return;
@@ -1060,22 +1065,95 @@ function applyHighlighting(): void {
   const bufferId = state.bufferId;
   editor.clearNamespace(bufferId, "config");
 
-  // Get cursor line for selection highlighting
-  const cursorLine = editor.getCursorLine();
+  // Rebuild entries to get properties for highlighting
+  const entries = buildDisplayEntries();
+  let byteOffset = 0;
 
-  // Apply highlighting using virtual lines with colors instead of overlays
-  // This avoids the complexity of byte offset calculations for multi-byte characters
+  for (const entry of entries) {
+    const text = entry.text;
+    const textLen = getUtf8ByteLength(text);
+    const props = entry.properties as Record<string, unknown>;
+    const entryType = props.type as string;
 
-  // For now, just highlight the current line with a background
-  // The text properties already provide semantic information
-  if (cursorLine >= 4) { // Skip header lines (0-indexed line 3 = display line 4)
-    const fieldIndex = cursorLine - 4; // Adjust for header
-    if (fieldIndex >= 0 && fieldIndex < state.visibleFields.length) {
-      const field = state.visibleFields[fieldIndex];
-      if (field) {
-        editor.setStatus(field.schema.description || field.name);
+    // Apply colors based on entry type
+    if (entryType === "title") {
+      // Title - gold/yellow
+      editor.addOverlay(bufferId, byteOffset, byteOffset + textLen, {
+        fg: colors.sectionHeader,
+        namespace: "config",
+      });
+    } else if (entryType === "file-path") {
+      // File path - gray
+      editor.addOverlay(bufferId, byteOffset, byteOffset + textLen, {
+        fg: colors.description,
+        namespace: "config",
+      });
+    } else if (entryType === "description") {
+      // Description/comment - subdued gray
+      editor.addOverlay(bufferId, byteOffset, byteOffset + textLen, {
+        fg: colors.description,
+        namespace: "config",
+      });
+    } else if (entryType === "section") {
+      // Section header - gold
+      editor.addOverlay(bufferId, byteOffset, byteOffset + textLen, {
+        fg: colors.sectionHeader,
+        namespace: "config",
+      });
+    } else if (entryType === "field") {
+      // Field line - highlight name and value differently
+      const fieldType = props.fieldType as string;
+      const isDefault = props.isDefault as boolean;
+
+      // Find the colon position to split name from value
+      const colonPos = text.indexOf(":");
+      if (colonPos > 0) {
+        const nameEnd = byteOffset + getUtf8ByteLength(text.substring(0, colonPos));
+        const valueStart = nameEnd + getUtf8ByteLength(": ");
+
+        // Field name - light blue
+        editor.addOverlay(bufferId, byteOffset, nameEnd, {
+          fg: colors.fieldName,
+          namespace: "config",
+        });
+
+        // Value - color based on type and default status
+        let valueFg = isDefault ? colors.defaultValue : colors.customValue;
+        if (fieldType === "boolean") {
+          // Check if true or false
+          if (text.includes("[x]")) {
+            valueFg = colors.boolTrue;
+          } else if (text.includes("[ ]")) {
+            valueFg = colors.boolFalse;
+          }
+        } else if (fieldType === "enum") {
+          valueFg = colors.enumValue;
+        } else if (fieldType === "number") {
+          valueFg = colors.numberValue;
+        } else if (fieldType === "string") {
+          valueFg = isDefault ? colors.defaultValue : colors.stringValue;
+        }
+
+        editor.addOverlay(bufferId, valueStart, byteOffset + textLen, {
+          fg: valueFg,
+          namespace: "config",
+        });
       }
+    } else if (entryType === "separator" || entryType === "footer") {
+      // Footer/separator - dim
+      editor.addOverlay(bufferId, byteOffset, byteOffset + textLen, {
+        fg: colors.footer,
+        namespace: "config",
+      });
     }
+
+    byteOffset += textLen;
+  }
+
+  // Update status with current field description
+  const field = getFieldAtCursor();
+  if (field) {
+    editor.setStatus(field.schema.description || field.name);
   }
 }
 
