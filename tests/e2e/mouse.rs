@@ -1554,3 +1554,66 @@ fn test_mouse_hover_same_position_preserves_state() {
         "Position should be preserved when staying at same spot"
     );
 }
+
+/// Test that clicking below the last line of a short file positions cursor
+/// on the last line at the clicked column (or end of line), not at 0,0.
+///
+/// Bug fix: Issue #283 - clicking below the last visible line in a short file
+/// was causing the cursor to jump to position 0,0 instead of staying on the
+/// last line at an appropriate column.
+#[test]
+fn test_mouse_click_below_last_line_positions_on_last_line() {
+    let mut harness = EditorTestHarness::new(80, 24).unwrap();
+
+    // Create a short file with only 3 lines - this will have lots of empty
+    // space below the content in the 24-row terminal
+    let content = "First line\nSecond line\nThird line";
+    let _fixture = harness.load_buffer_from_text(content).unwrap();
+    harness.render().unwrap();
+
+    // Get content area bounds
+    let (content_first_row, content_last_row) = harness.content_area_rows();
+    println!("Content area: rows {} to {}", content_first_row, content_last_row);
+
+    // The file has 3 lines, so content occupies rows:
+    // - content_first_row: "First line"
+    // - content_first_row + 1: "Second line"
+    // - content_first_row + 2: "Third line"
+    // Rows below content_first_row + 2 are empty space below the file
+
+    // Click well below the last line of content (e.g., row 15 in a 24-row terminal)
+    // This is clicking in empty space below the file content
+    // Use a column that would be in the middle of the text area (after the gutter)
+    let click_row = content_first_row as u16 + 10; // Well below the 3 lines of content
+    let click_col = 15; // In the text area, after the gutter (~8 chars)
+
+    println!("Clicking at row {}, col {}", click_row, click_col);
+    harness.mouse_click(click_col, click_row).unwrap();
+    harness.render().unwrap();
+
+    let cursor_pos = harness.cursor_position();
+    println!("Cursor position after click: {}", cursor_pos);
+
+    // The cursor should NOT be at position 0 (start of file)
+    // It should be on the last line (which starts at byte position 24: "First line\n" = 11 + "Second line\n" = 12 + "Third" = 5)
+    // "First line\n" = 11 bytes, "Second line\n" = 12 bytes, so third line starts at byte 23
+    let third_line_start = 23; // "First line\n" (11) + "Second line\n" (12) = 23
+    let content_len = content.len(); // 34 bytes total
+
+    assert!(
+        cursor_pos >= third_line_start,
+        "Cursor should be on the last line (byte >= {}), but was at position {}. \
+         Bug: clicking below last line should NOT jump to position 0.",
+        third_line_start,
+        cursor_pos
+    );
+
+    assert!(
+        cursor_pos <= content_len,
+        "Cursor position {} should be within buffer (len {})",
+        cursor_pos,
+        content_len
+    );
+
+    println!("SUCCESS: Cursor is on the last line at position {}", cursor_pos);
+}
