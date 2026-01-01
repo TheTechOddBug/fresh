@@ -11,7 +11,6 @@ fn trigger_git_grep(harness: &mut EditorTestHarness) {
     harness
         .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
         .unwrap();
-    harness.render().unwrap();
     harness.wait_for_prompt().unwrap();
     harness.type_text("Git Grep").unwrap();
     harness
