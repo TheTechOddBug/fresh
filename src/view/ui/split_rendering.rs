@@ -1159,13 +1159,15 @@ impl SplitRenderer {
                     let content_width = pane_width.saturating_sub(gutter_width);
 
                     // Build ViewData for this pane
+                    // Need enough lines to cover from first_line to last_line
+                    let lines_needed = last_line - first_line + 10;
                     let view_data = Self::build_view_data(
                         source_state,
                         &viewport,
-                        None,              // No view transform
-                        80,                // estimated_line_length
-                        visible_rows + 10, // visible_count (add buffer)
-                        false,             // line_wrap_enabled
+                        None,         // No view transform
+                        80,           // estimated_line_length
+                        lines_needed, // visible_count - enough to cover the range
+                        false,        // line_wrap_enabled
                         content_width,
                         gutter_width,
                     );

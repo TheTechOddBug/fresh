@@ -1181,8 +1181,9 @@ globalThis.review_drill_down = async () => {
         const removedCount = fileHunks.reduce((sum, fh) => {
             return sum + fh.lines.filter(l => l.startsWith('-')).length;
         }, 0);
+        const modifiedCount = Math.min(addedCount, removedCount);
 
-        editor.setStatus(editor.t("status.diff_summary", { added: String(addedLines), removed: String(removedLines), modified: String(modifiedLines) }));
+        editor.setStatus(editor.t("status.diff_summary", { added: String(addedCount), removed: String(removedCount), modified: String(modifiedCount) }));
     }
 };
 
