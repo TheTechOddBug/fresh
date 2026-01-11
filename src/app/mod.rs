@@ -271,6 +271,12 @@ pub struct Editor {
     /// Pending show_gitignored setting to apply when file explorer is initialized (from session restore)
     pending_file_explorer_show_gitignored: Option<bool>,
 
+    /// File explorer decorations by namespace
+    file_explorer_decorations: HashMap<String, Vec<crate::view::file_tree::FileExplorerDecoration>>,
+
+    /// Cached file explorer decorations (resolved + bubbled)
+    file_explorer_decoration_cache: crate::view::file_tree::FileExplorerDecorationCache,
+
     /// Whether menu bar is visible
     menu_bar_visible: bool,
 
@@ -901,7 +907,7 @@ impl Editor {
             None
         };
 
-        Ok(Editor {
+        let mut editor = Editor {
             buffers,
             event_logs,
             next_buffer_id: 1,
@@ -938,6 +944,9 @@ impl Editor {
             pending_file_explorer_show_hidden: None,
             pending_file_explorer_show_gitignored: None,
             menu_bar_visible: show_menu_bar,
+            file_explorer_decorations: HashMap::new(),
+            file_explorer_decoration_cache:
+                crate::view::file_tree::FileExplorerDecorationCache::default(),
             menu_bar_auto_shown: false,
             tab_bar_visible: show_tab_bar,
             mouse_enabled: true,
@@ -1065,7 +1074,20 @@ impl Editor {
             active_action_popup: None,
             composite_buffers: HashMap::new(),
             composite_view_states: HashMap::new(),
-        })
+        };
+
+        #[cfg(feature = "plugins")]
+        {
+            editor.update_plugin_state_snapshot();
+            if editor.plugin_manager.is_active() {
+                editor.plugin_manager.run_hook(
+                    "editor_initialized",
+                    crate::services::plugins::hooks::HookArgs::EditorInitialized,
+                );
+            }
+        }
+
+        Ok(editor)
     }
 
     /// Get a reference to the event broadcaster
@@ -3102,7 +3124,7 @@ impl Editor {
     /// - LSP diagnostics
     /// - LSP initialization/errors
     /// - File system changes (future)
-    /// - Git status updates (future)
+    /// - Git status updates
     pub fn process_async_messages(&mut self) -> bool {
         let Some(bridge) = &self.async_bridge else {
             return false;
@@ -3894,6 +3916,15 @@ impl Editor {
                 namespace,
             } => {
                 self.handle_clear_line_indicators(buffer_id, namespace);
+            }
+            PluginCommand::SetFileExplorerDecorations {
+                namespace,
+                decorations,
+            } => {
+                self.handle_set_file_explorer_decorations(namespace, decorations);
+            }
+            PluginCommand::ClearFileExplorerDecorations { namespace } => {
+                self.handle_clear_file_explorer_decorations(&namespace);
             }
 
             // ==================== Status/Prompt Commands ====================
