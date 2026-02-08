@@ -34,6 +34,9 @@ pub const GITCONFIG_GRAMMAR: &str = include_str!("../../grammars/gitconfig.subli
 /// Embedded Git Attributes grammar for .gitattributes
 pub const GITATTRIBUTES_GRAMMAR: &str = include_str!("../../grammars/gitattributes.sublime-syntax");
 
+/// Embedded Typst grammar (syntect doesn't include one)
+pub const TYPST_GRAMMAR: &str = include_str!("../../grammars/typst.sublime-syntax");
+
 /// Registry of all available TextMate grammars.
 ///
 /// This struct holds the compiled syntax set and provides lookup methods.
@@ -217,6 +220,17 @@ impl GrammarRegistry {
             }
             Err(e) => {
                 tracing::warn!("Failed to load embedded Git Attributes grammar: {}", e);
+            }
+        }
+
+        // Typst grammar
+        match SyntaxDefinition::load_from_str(TYPST_GRAMMAR, true, Some("Typst")) {
+            Ok(syntax) => {
+                builder.add(syntax);
+                tracing::debug!("Loaded embedded Typst grammar");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load embedded Typst grammar: {}", e);
             }
         }
     }
