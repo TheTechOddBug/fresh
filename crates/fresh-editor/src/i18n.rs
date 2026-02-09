@@ -19,6 +19,8 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+pub mod runtime_backend;
+
 /// Type alias for the nested plugin strings map.
 /// Structure: plugin_name -> locale -> key -> translated_string
 type PluginStringsMap = HashMap<String, HashMap<String, HashMap<String, String>>>;

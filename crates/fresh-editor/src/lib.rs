@@ -1,9 +1,14 @@
 // Editor library - exposes all core modules for testing
 
-// Initialize i18n with translations from locales/ directory
-rust_i18n::i18n!("locales", fallback = "en", minify_key = true);
-
 pub mod i18n;
+
+// Initialize i18n with empty directory (no compile-time code generation)
+// All translations are provided by the runtime backend
+rust_i18n::i18n!(
+    "locales-empty",
+    fallback = "en",
+    backend = i18n::runtime_backend::RuntimeBackend::new()
+);
 
 // Core types and config are always available (needed for schema generation)
 pub mod config;
