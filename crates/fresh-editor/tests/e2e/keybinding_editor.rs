@@ -1243,6 +1243,247 @@ fn test_deleted_binding_appears_as_unbound() {
     );
 }
 
+/// Test the full delete flow end-to-end:
+/// 1. Add a custom binding (Ctrl+Shift+D → duplicate_line), save
+/// 2. Verify the binding works (key performs the action) and appears in the table
+/// 3. Delete the binding, save
+/// 4. Verify the table shows the action without a bound key
+/// 5. Verify the key no longer performs the action
+#[test]
+fn test_delete_binding_full_flow() {
+    let mut harness = EditorTestHarness::new(120, 40).unwrap();
+
+    // === Phase 1: Add a custom binding Ctrl+Shift+D → duplicate_line ===
+    open_keybinding_editor(&mut harness);
+
+    // Press 'a' to open Add dialog
+    harness
+        .send_key(KeyCode::Char('a'), KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_contains("Add Keybinding");
+
+    // Record key: Ctrl+Shift+D
+    harness
+        .send_key(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        )
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_contains("Ctrl+Shift+D");
+
+    // Tab to Action field
+    harness.send_key(KeyCode::Tab, KeyModifiers::NONE).unwrap();
+
+    // Type "duplicate_line" and accept autocomplete
+    for ch in "duplicate_line".chars() {
+        harness
+            .send_key(KeyCode::Char(ch), KeyModifiers::NONE)
+            .unwrap();
+    }
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Tab to context, then to Save button, press Enter to save the dialog
+    harness.send_key(KeyCode::Tab, KeyModifiers::NONE).unwrap();
+    harness.send_key(KeyCode::Tab, KeyModifiers::NONE).unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_contains("modified");
+
+    // Save and close keybinding editor with Ctrl+S
+    harness
+        .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_not_contains("Keybinding Editor");
+
+    // === Phase 2: Verify binding works (before delete) ===
+    // Type some content
+    harness.type_text("aaa").unwrap();
+    harness.render().unwrap();
+
+    // Move cursor to start of buffer
+    harness
+        .send_key(KeyCode::Home, KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Press Ctrl+Shift+D to duplicate the line
+    harness
+        .send_key(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        )
+        .unwrap();
+    harness.render().unwrap();
+
+    let buffer_content = harness.get_buffer_content().unwrap();
+    assert_eq!(
+        buffer_content, "aaa\naaa",
+        "Before delete: Ctrl+Shift+D should duplicate the line (binding is active)"
+    );
+
+    // === Phase 3: Verify binding in table, then delete it ===
+    open_keybinding_editor(&mut harness);
+
+    // Search for "duplicate_line"
+    harness
+        .send_key(KeyCode::Char('/'), KeyModifiers::NONE)
+        .unwrap();
+    for ch in "duplicate_line".chars() {
+        harness
+            .send_key(KeyCode::Char(ch), KeyModifiers::NONE)
+            .unwrap();
+    }
+    // Enter to unfocus search
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Verify the custom binding appears in the table
+    let screen = harness.screen_to_string();
+    assert!(
+        screen.contains("Ctrl+Shift+D"),
+        "Before delete: table should show Ctrl+Shift+D for the binding"
+    );
+    assert!(
+        screen.contains("custom"),
+        "Before delete: table should show 'custom' source"
+    );
+
+    // Navigate to the custom binding row
+    harness.send_key(KeyCode::Home, KeyModifiers::NONE).unwrap();
+    harness.render().unwrap();
+
+    let mut found_custom = false;
+    for _ in 0..10 {
+        let current_screen = harness.screen_to_string();
+        for line in current_screen.lines() {
+            if line.contains(">") && line.contains("custom") {
+                found_custom = true;
+                break;
+            }
+        }
+        if found_custom {
+            break;
+        }
+        harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
+        harness.render().unwrap();
+    }
+    assert!(found_custom, "Should find the custom binding row to delete");
+
+    // Delete the custom binding
+    harness
+        .send_key(KeyCode::Char('d'), KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Save and close keybinding editor with Ctrl+S
+    harness
+        .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_not_contains("Keybinding Editor");
+
+    // === Phase 4: After delete - verify table shows action without key ===
+    open_keybinding_editor(&mut harness);
+
+    // Search for "duplicate_line"
+    harness
+        .send_key(KeyCode::Char('/'), KeyModifiers::NONE)
+        .unwrap();
+    for ch in "duplicate_line".chars() {
+        harness
+            .send_key(KeyCode::Char(ch), KeyModifiers::NONE)
+            .unwrap();
+    }
+    harness.render().unwrap();
+
+    let screen = harness.screen_to_string();
+    // The action should still appear (as unbound)
+    assert!(
+        screen.contains("duplicate_line") || screen.contains("Duplicate"),
+        "After delete: action should still be listed in the table"
+    );
+    // The key should NOT appear in the table
+    assert!(
+        !screen.contains("Ctrl+Shift+D"),
+        "After delete: Ctrl+Shift+D should NOT appear in the table (binding was deleted)"
+    );
+    // The source should NOT show "custom"
+    assert!(
+        !screen.contains("custom"),
+        "After delete: 'custom' source should NOT appear"
+    );
+
+    // Close keybinding editor
+    harness.send_key(KeyCode::Esc, KeyModifiers::NONE).unwrap();
+    harness.render().unwrap();
+
+    // === Phase 5: After delete - verify key has no effect ===
+    // Undo the duplicate from Phase 2 to restore "aaa"
+    harness
+        .send_key(KeyCode::Char('z'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    let buffer_content = harness.get_buffer_content().unwrap();
+    assert_eq!(buffer_content, "aaa", "After undo, buffer should be 'aaa'");
+
+    // Press Ctrl+Shift+D - should have NO effect since the binding was deleted
+    harness
+        .send_key(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        )
+        .unwrap();
+    harness.render().unwrap();
+
+    let buffer_content = harness.get_buffer_content().unwrap();
+    assert_eq!(
+        buffer_content, "aaa",
+        "After delete: Ctrl+Shift+D should have no effect (binding was removed)"
+    );
+}
+
+/// Test that adding a binding with a key that's already used shows a conflict warning
+#[test]
+fn test_add_binding_conflict_warning_for_existing_key() {
+    let mut harness = EditorTestHarness::new(120, 40).unwrap();
+    open_keybinding_editor(&mut harness);
+
+    // Press 'a' to open Add dialog
+    harness
+        .send_key(KeyCode::Char('a'), KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+    harness.assert_screen_contains("Add Keybinding");
+
+    // Record a key that is already in use: Ctrl+S (bound to "save" in the keymap)
+    harness
+        .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Should show the recorded key
+    harness.assert_screen_contains("Ctrl+S");
+
+    // Should show a conflict warning since Ctrl+S is already bound
+    let screen = harness.screen_to_string();
+    assert!(
+        screen.contains("Conflict"),
+        "Should show conflict warning when using a key already bound to another action.\nScreen:\n{}",
+        screen
+    );
+}
+
 // ========================
 // Terminal mode interaction
 // ========================
