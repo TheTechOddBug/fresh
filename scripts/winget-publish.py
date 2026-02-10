@@ -164,8 +164,8 @@ def main():
         # Ensure UpgradeBehavior is set (needed for winget upgrade to replace instead of install alongside)
         if "UpgradeBehavior" not in content:
             content = re.sub(
-                r"^(\s*NestedInstallerType: portable)$",
-                r"\1\n    UpgradeBehavior: uninstallPrevious",
+                r"^(\s*)(NestedInstallerType: portable)$",
+                r"\1\2\n\1UpgradeBehavior: uninstallPrevious",
                 content,
                 flags=re.MULTILINE,
             )
