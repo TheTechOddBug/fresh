@@ -1,5 +1,36 @@
 # Release Notes
 
+## 0.2.5
+
+### Features
+
+* **Persistent Auto-Save**: New `auto_save_enabled` config option (default: false) to automatically save modified buffers to their original file at a configurable interval (`auto_save_interval_secs`, default: 30s) (#542)
+
+* **Smart Home**: Home key now uses smart home behavior by default, toggling between the first non-whitespace character and column 0. On soft-wrapped lines, smart home respects visual line boundaries instead of jumping to the physical line start (#1064).
+
+### Bug Fixes
+
+* **Diff View Scrollbar**: Fixed scrollbar click-to-jump and thumb drag not working in side-by-side diff views. Composite buffer views now use row-based scrolling via CompositeViewState.
+
+* **Terminal Bracket Paste**: Fixed pasted text going into the editor buffer instead of the terminal PTY when in terminal mode (#1056).
+
+* **LSP did_open Reliability**: Fixed buffer being incorrectly marked as LSP-opened when the did_open send fails, which prevented retry and could corrupt server document state.
+
+* **Remote Editing Data Loss**: Fixed intermittent data loss when loading large files via SSH remote editing on macOS. The bounded channel now uses backpressure instead of silently dropping data when the buffer overflows (#1059).
+
+### Configuration
+
+* Renamed `auto_save_interval_secs` (recovery) to `auto_recovery_save_interval_secs` to distinguish it from the new persistent auto-save feature. Added `auto_recovery_save_interval_secs` config option (default: 2s).
+
+### Internal
+
+* Introduced typed `LeafId` and `ContainerId` wrappers around `SplitId` to enforce leaf-vs-container constraints at compile time.
+* Enabled `#![deny(clippy::let_underscore_must_use)]` crate-wide; all ignored `Result` values now have explicit annotations or proper error handling.
+* Made `request_completion` and `request_signature_help` infallible, removing dead `Result` return types.
+* Added CONTRIBUTING.md with development guidelines.
+
+---
+
 ## 0.2.4
 
 ### Features
