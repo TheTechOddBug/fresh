@@ -13,7 +13,7 @@
  * - syncWithEditor for bidirectional cursor sync
  */
 
-import { Finder, createLiveProvider, getRelativePath, type FinderProvider } from "./lib/finder.ts";
+import { Finder, createLiveProvider, type FinderProvider } from "./lib/finder.ts";
 
 const editor = getEditor();
 
@@ -125,15 +125,6 @@ const finder = new Finder<DiagnosticItem>(editor, {
   }),
   groupBy: "file",
   syncWithEditor: true,
-  onSelect: (d) => {
-    const displayPath = getRelativePath(editor, d.file);
-    editor.setStatus(
-      editor.t("status.jumped_to", {
-        file: displayPath,
-        line: String(d.line),
-      })
-    );
-  },
 });
 
 // Get title based on current filter state
