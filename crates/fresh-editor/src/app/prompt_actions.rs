@@ -1067,6 +1067,18 @@ impl Editor {
                         );
                     }
                 }
+
+                // Clear diagnostics and overlays for all buffers of this language
+                let buffer_ids: Vec<_> = self
+                    .buffers
+                    .iter()
+                    .filter(|(_, s)| s.language == language)
+                    .map(|(id, _)| *id)
+                    .collect();
+                for buffer_id in buffer_ids {
+                    self.disable_lsp_for_buffer(buffer_id);
+                }
+
                 self.set_status_message(t!("lsp.server_stopped", language = language).to_string());
             } else {
                 self.set_status_message(

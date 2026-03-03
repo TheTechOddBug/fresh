@@ -765,7 +765,7 @@ pub struct EditorConfig {
     /// Lower values (10-50ms) feel more responsive but may be distracting.
     /// Higher values (100-500ms) reduce noise while typing.
     /// Trigger characters (like `.`) bypass this delay.
-    /// Default: 10 (matches VS Code)
+    /// Default: 150
     #[serde(default = "default_quick_suggestions_delay")]
     #[schemars(extend("x-section" = "Completion"))]
     pub quick_suggestions_delay_ms: u64,
@@ -994,7 +994,7 @@ fn default_false() -> bool {
 }
 
 fn default_quick_suggestions_delay() -> u64 {
-    10 // 10ms like VS Code
+    150 // 150ms — fast enough to feel responsive, slow enough to not interrupt typing
 }
 
 fn default_accept_suggestion_on_enter() -> AcceptSuggestionOnEnter {

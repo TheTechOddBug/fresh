@@ -60,7 +60,7 @@
         "highlight_matching_brackets": true,
         "rainbow_brackets": true,
         "quick_suggestions": true,
-        "quick_suggestions_delay_ms": 10,
+        "quick_suggestions_delay_ms": 150,
         "suggest_on_trigger_characters": true,
         "accept_suggestion_on_enter": "on",
         "enable_inlay_hints": true,
@@ -409,11 +409,11 @@
           "x-section": "Completion"
         },
         "quick_suggestions_delay_ms": {
-          "description": "Delay in milliseconds before showing completion suggestions.\nLower values (10-50ms) feel more responsive but may be distracting.\nHigher values (100-500ms) reduce noise while typing.\nTrigger characters (like `.`) bypass this delay.\nDefault: 10 (matches VS Code)",
+          "description": "Delay in milliseconds before showing completion suggestions.\nLower values (10-50ms) feel more responsive but may be distracting.\nHigher values (100-500ms) reduce noise while typing.\nTrigger characters (like `.`) bypass this delay.\nDefault: 150",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,
-          "default": 10,
+          "default": 150,
           "x-section": "Completion"
         },
         "suggest_on_trigger_characters": {

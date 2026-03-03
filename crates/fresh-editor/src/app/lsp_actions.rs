@@ -398,7 +398,7 @@ impl Editor {
     }
 
     /// Disable LSP for a specific buffer and clear all LSP-related data
-    fn disable_lsp_for_buffer(&mut self, buffer_id: crate::model::event::BufferId) {
+    pub(crate) fn disable_lsp_for_buffer(&mut self, buffer_id: crate::model::event::BufferId) {
         // Send didClose to the LSP server so it removes the document from its
         // tracking. This is critical: without didClose, the async handler's
         // document_versions still has the path, and should_skip_did_open will
@@ -455,8 +455,17 @@ impl Editor {
 
         if let Some(uri_str) = uri {
             self.stored_diagnostics.remove(&uri_str);
+            self.stored_push_diagnostics.remove(&uri_str);
+            self.stored_pull_diagnostics.remove(&uri_str);
             self.diagnostic_result_ids.remove(&uri_str);
             self.stored_folding_ranges.remove(&uri_str);
+        }
+
+        // Cancel scheduled diagnostic pull if it targets this buffer
+        if let Some((scheduled_buf, _)) = &self.scheduled_diagnostic_pull {
+            if *scheduled_buf == buffer_id {
+                self.scheduled_diagnostic_pull = None;
+            }
         }
 
         self.folding_ranges_in_flight.remove(&buffer_id);
@@ -464,9 +473,13 @@ impl Editor {
         self.pending_folding_range_requests
             .retain(|_, req| req.buffer_id != buffer_id);
 
-        // Clear LSP-related overlays (inlay hints) for this buffer
+        // Clear all LSP-related overlays for this buffer (diagnostics + inlay hints)
+        let diagnostic_ns = crate::services::lsp::diagnostics::lsp_diagnostic_namespace();
         let (buffers, split_view_states) = (&mut self.buffers, &mut self.split_view_states);
         if let Some(state) = buffers.get_mut(&buffer_id) {
+            state
+                .overlays
+                .clear_namespace(&diagnostic_ns, &mut state.marker_list);
             state.virtual_texts.clear(&mut state.marker_list);
             state.folding_ranges.clear();
             for view_state in split_view_states.values_mut() {

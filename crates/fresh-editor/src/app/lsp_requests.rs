@@ -287,6 +287,8 @@ impl Editor {
     /// This should be called when the user performs an action that would make
     /// the pending request's results stale (e.g., cursor movement, text editing)
     pub(crate) fn cancel_pending_lsp_requests(&mut self) {
+        // Cancel scheduled (not yet sent) completion trigger
+        self.scheduled_completion_trigger = None;
         if let Some(request_id) = self.pending_completion_request.take() {
             tracing::debug!("Canceling pending LSP completion request {}", request_id);
             // Send cancellation to the LSP server
@@ -486,6 +488,11 @@ impl Editor {
             // Schedule (or reschedule) the completion trigger
             // This effectively debounces - each keystroke resets the timer
             self.scheduled_completion_trigger = Some(trigger_time);
+        } else {
+            // Non-word, non-trigger character (space, punctuation, etc.) —
+            // cancel any pending scheduled trigger so a stale timer from the
+            // previous word doesn't fire at the wrong cursor position.
+            self.scheduled_completion_trigger = None;
         }
     }
 
@@ -1826,10 +1833,10 @@ impl Editor {
                 }
             }
 
-            // Schedule debounced diagnostic re-pull (500ms after last edit)
+            // Schedule debounced diagnostic re-pull (1000ms after last edit)
             self.scheduled_diagnostic_pull = Some((
                 buffer_id,
-                std::time::Instant::now() + std::time::Duration::from_millis(500),
+                std::time::Instant::now() + std::time::Duration::from_millis(1000),
             ));
         }
     }
