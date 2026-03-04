@@ -1462,8 +1462,11 @@ globalThis.onThemeInspectKey = async function(data: {
   theme_name: string;
   key: string;
 }): Promise<void> {
-  // If already open, just navigate to the key
+  // If already open, focus and navigate to the key
   if (isThemeEditorOpen()) {
+    if (state.bufferId !== null) {
+      editor.showBuffer(state.bufferId);
+    }
     const section = data.key.split(".")[0];
     if (!state.expandedSections.has(section)) {
       state.expandedSections.add(section);

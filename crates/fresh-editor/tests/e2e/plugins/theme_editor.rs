@@ -2538,3 +2538,135 @@ fn test_inspect_theme_at_cursor_opens_theme_editor() {
         screen
     );
 }
+
+/// Test multiple rounds of inspect → focus source buffer → inspect again.
+/// Verifies the theme editor re-navigates correctly when already open.
+#[test]
+fn test_inspect_theme_at_cursor_multiple_rounds() {
+    init_tracing_from_env();
+
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let project_root = temp_dir.path().join("project_root");
+    fs::create_dir(&project_root).unwrap();
+
+    let plugins_dir = project_root.join("plugins");
+    fs::create_dir(&plugins_dir).unwrap();
+    copy_plugin(&plugins_dir, "theme_editor");
+
+    let test_file = project_root.join("test.txt");
+    fs::write(&test_file, "Hello world\nLine two\nLine three\n").unwrap();
+
+    let mut harness =
+        EditorTestHarness::with_config_and_working_dir(120, 40, Default::default(), project_root)
+            .unwrap();
+
+    harness.open_file(&test_file).unwrap();
+    harness.render().unwrap();
+
+    // === Round 1: First inspect ===
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Inspect Theme at Cursor").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("Theme Editor") || screen.contains("*Theme Editor*")
+        })
+        .unwrap();
+
+    let screen = harness.screen_to_string();
+    assert!(
+        screen.contains("editor.fg") || screen.contains("editor.bg"),
+        "Round 1: Theme editor should show editor keys. Screen:\n{}",
+        screen
+    );
+
+    // === Switch back to source buffer (Ctrl+PageDown = next_buffer) ===
+    harness
+        .send_key(KeyCode::PageDown, KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Verify we're back on the source file
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Hello world"))
+        .unwrap();
+
+    // === Round 2: Inspect again while theme editor is already open ===
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Inspect Theme at Cursor").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Theme editor should re-focus (the hook navigates when already open)
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("Theme Editor") || screen.contains("*Theme Editor*")
+        })
+        .unwrap();
+
+    let screen = harness.screen_to_string();
+    assert!(
+        screen.contains("editor.fg") || screen.contains("editor.bg"),
+        "Round 2: Theme editor should still show editor keys after re-inspect. Screen:\n{}",
+        screen
+    );
+
+    // === Switch back to source again ===
+    harness
+        .send_key(KeyCode::PageDown, KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Hello world"))
+        .unwrap();
+
+    // === Round 3: One more inspect to confirm stability ===
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Inspect Theme at Cursor").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("Theme Editor") || screen.contains("*Theme Editor*")
+        })
+        .unwrap();
+
+    let screen = harness.screen_to_string();
+    assert!(
+        screen.contains("editor.fg") || screen.contains("editor.bg"),
+        "Round 3: Theme editor should work on third inspect. Screen:\n{}",
+        screen
+    );
+
+    // Should still not have prompted for theme selection at any point
+    assert!(
+        !screen.contains("Select theme to edit"),
+        "Should never prompt for theme selection during inspect. Screen:\n{}",
+        screen
+    );
+}
