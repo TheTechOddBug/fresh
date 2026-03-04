@@ -21,6 +21,8 @@ pub struct InputParser {
     max_buffer_size: usize,
     /// When the buffer last received a byte (for ESC timeout)
     last_byte_time: Option<Instant>,
+    /// Buffer for bracketed paste content (between \x1b[200~ and \x1b[201~)
+    paste_buffer: Option<Vec<u8>>,
 }
 
 impl Default for InputParser {
@@ -35,6 +37,7 @@ impl InputParser {
             buffer: Vec::with_capacity(32),
             max_buffer_size: 256,
             last_byte_time: None,
+            paste_buffer: None,
         }
     }
 
@@ -43,6 +46,20 @@ impl InputParser {
         let mut events = Vec::new();
 
         for &byte in bytes {
+            // If we're inside a bracketed paste, buffer bytes until end marker
+            if let Some(ref mut paste_buf) = self.paste_buffer {
+                paste_buf.push(byte);
+                // Check for end marker: \x1b[201~
+                if paste_buf.len() >= 6 && paste_buf.ends_with(b"\x1b[201~") {
+                    // Remove the end marker from the paste content
+                    let content_len = paste_buf.len() - 6;
+                    let text = String::from_utf8_lossy(&paste_buf[..content_len]).into_owned();
+                    self.paste_buffer = None;
+                    events.push(Event::Paste(text));
+                }
+                continue;
+            }
+
             self.buffer.push(byte);
             self.last_byte_time = Some(Instant::now());
 
@@ -50,6 +67,12 @@ impl InputParser {
             match self.try_parse() {
                 ParseResult::Complete(event) => {
                     events.push(event);
+                    self.buffer.clear();
+                    self.last_byte_time = None;
+                }
+                ParseResult::PasteStart => {
+                    // Enter bracketed paste mode
+                    self.paste_buffer = Some(Vec::new());
                     self.buffer.clear();
                     self.last_byte_time = None;
                 }
@@ -253,6 +276,20 @@ impl InputParser {
     /// Parse tilde sequences: CSI number ~
     fn parse_tilde_sequence(&self, params: &[u8]) -> ParseResult {
         let (num, modifiers) = self.parse_num_and_modifiers(params);
+
+        // Bracketed paste start: CSI 200 ~
+        if num == 200 {
+            return ParseResult::PasteStart;
+        }
+
+        // Bracketed paste end: CSI 201 ~ (shouldn't appear outside paste mode,
+        // but handle gracefully by ignoring)
+        if num == 201 {
+            return ParseResult::Complete(Event::Key(KeyEvent::new(
+                KeyCode::Null,
+                KeyModifiers::empty(),
+            )));
+        }
 
         let keycode = match num {
             1 => KeyCode::Home,
@@ -458,6 +495,8 @@ impl InputParser {
 enum ParseResult {
     /// Successfully parsed a complete event
     Complete(Event),
+    /// Bracketed paste start marker detected (\x1b[200~)
+    PasteStart,
     /// Need more bytes to complete the sequence
     Incomplete,
     /// Invalid sequence
@@ -856,6 +895,111 @@ mod tests {
                 assert!(matches!(me.kind, MouseEventKind::Down(MouseButton::Left)));
             }
             _ => panic!("Expected mouse down event, got {:?}", events[1]),
+        }
+    }
+
+    // ---- Bracketed paste tests ----
+
+    #[test]
+    fn test_bracketed_paste_simple() {
+        let mut parser = InputParser::new();
+        // Bracketed paste: \x1b[200~ ... \x1b[201~
+        let events = parser.parse(b"\x1b[200~Hello, world!\x1b[201~");
+        assert_eq!(events.len(), 1, "Expected 1 paste event, got: {:?}", events);
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, "Hello, world!"),
+            _ => panic!("Expected Paste event, got {:?}", events[0]),
+        }
+    }
+
+    #[test]
+    fn test_bracketed_paste_with_newlines() {
+        let mut parser = InputParser::new();
+        let events = parser.parse(b"\x1b[200~line1\nline2\nline3\x1b[201~");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, "line1\nline2\nline3"),
+            _ => panic!("Expected Paste event"),
+        }
+    }
+
+    #[test]
+    fn test_bracketed_paste_split_across_chunks() {
+        let mut parser = InputParser::new();
+
+        // Start marker arrives
+        let events = parser.parse(b"\x1b[200~Hello");
+        assert!(events.is_empty(), "Paste not complete yet");
+
+        // More content
+        let events = parser.parse(b", world!");
+        assert!(events.is_empty(), "Paste not complete yet");
+
+        // End marker arrives
+        let events = parser.parse(b"\x1b[201~");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, "Hello, world!"),
+            _ => panic!("Expected Paste event"),
+        }
+    }
+
+    #[test]
+    fn test_bracketed_paste_followed_by_keypress() {
+        let mut parser = InputParser::new();
+        // Paste followed by a regular keypress
+        let events = parser.parse(b"\x1b[200~pasted\x1b[201~a");
+        assert_eq!(
+            events.len(),
+            2,
+            "Expected paste + key event, got: {:?}",
+            events
+        );
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, "pasted"),
+            _ => panic!("Expected Paste event"),
+        }
+        match &events[1] {
+            Event::Key(ke) => assert_eq!(ke.code, KeyCode::Char('a')),
+            _ => panic!("Expected key event"),
+        }
+    }
+
+    #[test]
+    fn test_bracketed_paste_empty() {
+        let mut parser = InputParser::new();
+        let events = parser.parse(b"\x1b[200~\x1b[201~");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, ""),
+            _ => panic!("Expected empty Paste event"),
+        }
+    }
+
+    #[test]
+    fn test_bracketed_paste_with_escape_sequences_inside() {
+        let mut parser = InputParser::new();
+        // Pasted text might contain escape sequences (e.g., colored text from another terminal)
+        let events = parser.parse(b"\x1b[200~\x1b[31mred text\x1b[0m\x1b[201~");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            Event::Paste(text) => assert_eq!(text, "\x1b[31mred text\x1b[0m"),
+            _ => panic!("Expected Paste event with escape sequences"),
+        }
+    }
+
+    #[test]
+    fn test_keypress_then_bracketed_paste() {
+        let mut parser = InputParser::new();
+        let events = parser.parse(b"x\x1b[200~pasted\x1b[201~");
+        assert_eq!(events.len(), 2);
+        match &events[0] {
+            Event::Key(ke) => assert_eq!(ke.code, KeyCode::Char('x')),
+            _ => panic!("Expected key event"),
+        }
+        match &events[1] {
+            Event::Paste(text) => assert_eq!(text, "pasted"),
+            _ => panic!("Expected Paste event"),
         }
     }
 }

@@ -324,45 +324,57 @@ impl Backend for CaptureBackend {
 }
 
 /// Generate terminal setup sequences
+///
+/// Uses shared constants from `terminal_modes::sequences` to stay in sync
+/// with the direct-mode terminal setup in `TerminalModes::enable()`.
 pub fn terminal_setup_sequences() -> Vec<u8> {
+    use crate::services::terminal_modes::sequences as seq;
+
     let mut buf = Vec::new();
 
     // Enter alternate screen
-    buf.extend_from_slice(b"\x1b[?1049h");
+    buf.extend_from_slice(seq::ENTER_ALTERNATE_SCREEN);
     // Enable mouse tracking (SGR format)
-    buf.extend_from_slice(b"\x1b[?1000h"); // Enable mouse click tracking
-    buf.extend_from_slice(b"\x1b[?1002h"); // Enable mouse drag tracking
-    buf.extend_from_slice(b"\x1b[?1003h"); // Enable mouse motion tracking (for hover)
-    buf.extend_from_slice(b"\x1b[?1006h"); // Enable SGR mouse format
-                                           // Enable focus events
-    buf.extend_from_slice(b"\x1b[?1004h");
+    buf.extend_from_slice(seq::ENABLE_MOUSE_CLICK);
+    buf.extend_from_slice(seq::ENABLE_MOUSE_DRAG);
+    buf.extend_from_slice(seq::ENABLE_MOUSE_MOTION);
+    buf.extend_from_slice(seq::ENABLE_SGR_MOUSE);
+    // Enable focus events
+    buf.extend_from_slice(seq::ENABLE_FOCUS_EVENTS);
     // Enable bracketed paste
-    buf.extend_from_slice(b"\x1b[?2004h");
+    buf.extend_from_slice(seq::ENABLE_BRACKETED_PASTE);
     // Hide cursor initially
-    buf.extend_from_slice(b"\x1b[?25l");
+    buf.extend_from_slice(seq::HIDE_CURSOR);
 
     buf
 }
 
 /// Generate terminal teardown sequences
+///
+/// Uses shared constants from `terminal_modes::sequences` to stay in sync
+/// with the cleanup in `TerminalModes::undo()` and `emergency_cleanup()`.
 pub fn terminal_teardown_sequences() -> Vec<u8> {
+    use crate::services::terminal_modes::sequences as seq;
+
     let mut buf = Vec::new();
 
     // Show cursor
-    buf.extend_from_slice(b"\x1b[?25h");
+    buf.extend_from_slice(seq::SHOW_CURSOR);
+    // Reset cursor style to default
+    buf.extend_from_slice(seq::RESET_CURSOR_STYLE);
     // Disable bracketed paste
-    buf.extend_from_slice(b"\x1b[?2004l");
+    buf.extend_from_slice(seq::DISABLE_BRACKETED_PASTE);
     // Disable focus events
-    buf.extend_from_slice(b"\x1b[?1004l");
+    buf.extend_from_slice(seq::DISABLE_FOCUS_EVENTS);
     // Disable mouse tracking
-    buf.extend_from_slice(b"\x1b[?1006l");
-    buf.extend_from_slice(b"\x1b[?1003l");
-    buf.extend_from_slice(b"\x1b[?1002l");
-    buf.extend_from_slice(b"\x1b[?1000l");
+    buf.extend_from_slice(seq::DISABLE_SGR_MOUSE);
+    buf.extend_from_slice(seq::DISABLE_MOUSE_MOTION);
+    buf.extend_from_slice(seq::DISABLE_MOUSE_DRAG);
+    buf.extend_from_slice(seq::DISABLE_MOUSE_CLICK);
     // Reset attributes
-    buf.extend_from_slice(b"\x1b[0m");
+    buf.extend_from_slice(seq::RESET_ATTRIBUTES);
     // Leave alternate screen
-    buf.extend_from_slice(b"\x1b[?1049l");
+    buf.extend_from_slice(seq::LEAVE_ALTERNATE_SCREEN);
 
     buf
 }

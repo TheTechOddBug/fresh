@@ -9,6 +9,9 @@
 //!
 //! It provides a `TerminalModes` struct that tracks which modes were enabled
 //! and can restore the terminal to its original state via the `undo()` method.
+//!
+//! The `sequences` submodule provides raw ANSI escape sequence constants
+//! shared between direct mode (crossterm) and client/server mode (raw bytes).
 
 use anyhow::Result;
 use crossterm::{
@@ -24,6 +27,43 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{stdout, Write};
+
+/// Raw ANSI escape sequences for terminal mode control.
+///
+/// These constants are the canonical source of truth for terminal escape sequences
+/// used by both direct mode (`TerminalModes`) and client/server mode
+/// (`terminal_setup_sequences` / `terminal_teardown_sequences`).
+pub mod sequences {
+    // Alternate screen
+    pub const ENTER_ALTERNATE_SCREEN: &[u8] = b"\x1b[?1049h";
+    pub const LEAVE_ALTERNATE_SCREEN: &[u8] = b"\x1b[?1049l";
+
+    // Mouse tracking (SGR format)
+    pub const ENABLE_MOUSE_CLICK: &[u8] = b"\x1b[?1000h";
+    pub const ENABLE_MOUSE_DRAG: &[u8] = b"\x1b[?1002h";
+    pub const ENABLE_MOUSE_MOTION: &[u8] = b"\x1b[?1003h";
+    pub const ENABLE_SGR_MOUSE: &[u8] = b"\x1b[?1006h";
+    pub const DISABLE_MOUSE_CLICK: &[u8] = b"\x1b[?1000l";
+    pub const DISABLE_MOUSE_DRAG: &[u8] = b"\x1b[?1002l";
+    pub const DISABLE_MOUSE_MOTION: &[u8] = b"\x1b[?1003l";
+    pub const DISABLE_SGR_MOUSE: &[u8] = b"\x1b[?1006l";
+
+    // Focus events
+    pub const ENABLE_FOCUS_EVENTS: &[u8] = b"\x1b[?1004h";
+    pub const DISABLE_FOCUS_EVENTS: &[u8] = b"\x1b[?1004l";
+
+    // Bracketed paste
+    pub const ENABLE_BRACKETED_PASTE: &[u8] = b"\x1b[?2004h";
+    pub const DISABLE_BRACKETED_PASTE: &[u8] = b"\x1b[?2004l";
+
+    // Cursor
+    pub const SHOW_CURSOR: &[u8] = b"\x1b[?25h";
+    pub const HIDE_CURSOR: &[u8] = b"\x1b[?25l";
+    pub const RESET_CURSOR_STYLE: &[u8] = b"\x1b[0 q";
+
+    // Attributes
+    pub const RESET_ATTRIBUTES: &[u8] = b"\x1b[0m";
+}
 
 /// Configuration for keyboard enhancement flags.
 #[derive(Debug, Clone)]
