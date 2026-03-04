@@ -2853,3 +2853,165 @@ fn test_save_builtin_theme_produces_valid_file() {
         content
     );
 }
+
+/// Test that after saving a custom theme, "Inspect Theme at Cursor" works
+/// with the newly saved theme active. Reproduces a bug where the normalized
+/// theme name (underscores→hyphens) didn't match the filename on disk.
+#[test]
+fn test_inspect_after_saving_custom_theme() {
+    init_tracing_from_env();
+
+    let context_temp = tempfile::TempDir::new().unwrap();
+    let dir_context = DirectoryContext::for_testing(context_temp.path());
+    fs::create_dir_all(dir_context.themes_dir()).unwrap();
+
+    let project_temp = tempfile::TempDir::new().unwrap();
+    let project_root = project_temp.path().join("project_root");
+    fs::create_dir(&project_root).unwrap();
+
+    let plugins_dir = project_root.join("plugins");
+    fs::create_dir(&plugins_dir).unwrap();
+    copy_plugin(&plugins_dir, "theme_editor");
+
+    let test_file = project_root.join("test.txt");
+    fs::write(&test_file, "Hello world\n").unwrap();
+
+    let mut harness = EditorTestHarness::with_shared_dir_context(
+        120,
+        40,
+        Default::default(),
+        project_root.clone(),
+        dir_context.clone(),
+    )
+    .unwrap();
+
+    harness.open_file(&test_file).unwrap();
+    harness.render().unwrap();
+
+    // === Step 1: Open theme editor, select builtin, edit a color, save as custom ===
+
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Edit Theme").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Select theme to edit"))
+        .unwrap();
+
+    harness.type_text("light").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("Theme Editor") || screen.contains("*Theme Editor*")
+        })
+        .unwrap();
+
+    // Edit a color field
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+    harness
+        .wait_until(|h| h.screen_to_string().contains("#"))
+        .unwrap();
+    harness
+        .send_key(KeyCode::Char('a'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.type_text("#FF0000").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Theme Editor"))
+        .unwrap();
+
+    // Save as "light_custom" (with underscore to test normalization)
+    harness
+        .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("Save theme as")
+        })
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("light_custom").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| {
+            let screen = h.screen_to_string();
+            screen.contains("saved") || screen.contains("Saved") || screen.contains("applied")
+        })
+        .unwrap();
+
+    // === Step 2: Close theme editor via Escape ===
+    harness.send_key(KeyCode::Esc, KeyModifiers::NONE).unwrap();
+    harness.render().unwrap();
+
+    harness
+        .wait_until(|h| h.screen_to_string().contains("Hello world"))
+        .unwrap();
+
+    // === Step 3: Inspect Theme at Cursor — should work with the custom theme ===
+    harness
+        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+    harness.type_text("Inspect Theme at Cursor").unwrap();
+    harness.render().unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.render().unwrap();
+
+    // Wait for theme editor to reopen via inspect hook
+    let result = harness.wait_until(|h| {
+        let screen = h.screen_to_string();
+        screen.contains("Theme Editor") || screen.contains("*Theme Editor*")
+    });
+
+    let screen = harness.screen_to_string();
+
+    assert!(
+        result.is_ok(),
+        "Theme editor should open via inspect on custom theme. Screen:\n{}",
+        screen
+    );
+
+    // Should NOT show "Failed to load" error
+    assert!(
+        !screen.contains("Failed to load"),
+        "Should not fail to load the custom theme. Screen:\n{}",
+        screen
+    );
+
+    // Should show editor fields (the section should be expanded)
+    assert!(
+        screen.contains("editor.fg") || screen.contains("editor.bg"),
+        "Theme editor should show editor fields after inspect. Screen:\n{}",
+        screen
+    );
+}

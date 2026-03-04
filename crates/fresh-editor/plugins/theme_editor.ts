@@ -1316,7 +1316,9 @@ editor.on("prompt_cancelled", "onThemePromptCancelled");
  * @param restorePath - Optional field path to restore cursor to after save
  */
 async function saveTheme(name?: string, restorePath?: string | null): Promise<boolean> {
-  const themeName = name || state.themeName;
+  // Normalize theme name: lowercase, replace underscores/spaces with hyphens
+  // (must match Rust's normalize_theme_name so config name matches filename)
+  const themeName = (name || state.themeName).toLowerCase().replace(/[_ ]/g, "-");
   const userThemesDir = getUserThemesDir();
 
   // Ensure themes directory exists
