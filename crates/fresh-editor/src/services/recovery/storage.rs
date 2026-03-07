@@ -684,7 +684,7 @@ impl RecoveryStorage {
 impl Default for RecoveryStorage {
     fn default() -> Self {
         Self::new().unwrap_or_else(|_| Self {
-            recovery_dir: PathBuf::from("/tmp/fresh-recovery"),
+            recovery_dir: std::env::temp_dir().join("fresh-recovery"),
         })
     }
 }
