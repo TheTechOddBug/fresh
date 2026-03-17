@@ -1703,3 +1703,83 @@ fn test_reopen_with_file_arg_restores_session_and_opens_new_file() {
         harness.assert_screen_contains("MODIFIED");
     }
 }
+
+/// Test that tab order is preserved across workspace save/restore.
+/// Reproduces issue #1234.
+#[test]
+fn test_tab_order_preserved_across_restore() {
+    use crate::common::harness::HarnessOptions;
+    use fresh::config_io::DirectoryContext;
+
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path().join("project");
+    std::fs::create_dir(&project_dir).unwrap();
+
+    // Create files with names that would sort differently alphabetically
+    // vs. the order we open them in.
+    let file_c = project_dir.join("c.txt");
+    let file_a = project_dir.join("a.txt");
+    let file_b = project_dir.join("b.txt");
+    std::fs::write(&file_c, "Content C").unwrap();
+    std::fs::write(&file_a, "Content A").unwrap();
+    std::fs::write(&file_b, "Content B").unwrap();
+
+    let dir_context = DirectoryContext::for_testing(temp_dir.path());
+
+    // First session: open files in order c, a, b (not alphabetical)
+    {
+        let mut harness = EditorTestHarness::create(
+            100,
+            24,
+            HarnessOptions::new()
+                .with_config(Config::default())
+                .with_working_dir(project_dir.clone())
+                .with_shared_dir_context(dir_context.clone())
+                .without_empty_plugins_dir(),
+        )
+        .unwrap();
+
+        harness.open_file(&file_c).unwrap();
+        harness.open_file(&file_a).unwrap();
+        harness.open_file(&file_b).unwrap();
+        harness.render().unwrap();
+
+        // Verify initial order on screen: tabs should appear as c.txt, a.txt, b.txt
+        let screen = harness.screen_to_string();
+        let pos_c = screen.find("c.txt").expect("c.txt should be in tabs");
+        let pos_a = screen.find("a.txt").expect("a.txt should be in tabs");
+        let pos_b = screen.find("b.txt").expect("b.txt should be in tabs");
+        assert!(
+            pos_c < pos_a && pos_a < pos_b,
+            "Initial tab order should be c, a, b. Got c={pos_c} a={pos_a} b={pos_b}\nScreen:\n{screen}"
+        );
+
+        harness.shutdown(true).unwrap();
+    }
+
+    // Second session: restore and verify order is preserved
+    {
+        let mut harness = EditorTestHarness::create(
+            100,
+            24,
+            HarnessOptions::new()
+                .with_config(Config::default())
+                .with_working_dir(project_dir.clone())
+                .with_shared_dir_context(dir_context.clone())
+                .without_empty_plugins_dir(),
+        )
+        .unwrap();
+
+        let restored = harness.startup(true, &[]).unwrap();
+        assert!(restored, "Session should have been restored");
+
+        let screen = harness.screen_to_string();
+        let pos_c = screen.find("c.txt").expect("c.txt should be in tabs");
+        let pos_a = screen.find("a.txt").expect("a.txt should be in tabs");
+        let pos_b = screen.find("b.txt").expect("b.txt should be in tabs");
+        assert!(
+            pos_c < pos_a && pos_a < pos_b,
+            "Restored tab order should be c, a, b (same as before). Got c={pos_c} a={pos_a} b={pos_b}\nScreen:\n{screen}"
+        );
+    }
+}
