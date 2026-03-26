@@ -1674,6 +1674,12 @@ impl Editor {
             return false;
         };
 
+        // Get file path from active buffer for workspace root detection
+        let file_path = self
+            .buffer_metadata
+            .get(&self.active_buffer())
+            .and_then(|meta| meta.file_path().cloned());
+
         match action {
             "allow_once" => {
                 // Spawn the LSP server just this once (don't add to always-allowed)
@@ -1681,7 +1687,7 @@ impl Editor {
                     // Temporarily allow this language for spawning
                     lsp.allow_language(&language);
                     // Use force_spawn since user explicitly confirmed
-                    if lsp.force_spawn(&language, None).is_some() {
+                    if lsp.force_spawn(&language, file_path.as_deref()).is_some() {
                         tracing::info!("LSP server for {} started (allowed once)", language);
                         self.set_status_message(
                             t!("lsp.server_started", language = language).to_string(),
@@ -1700,7 +1706,7 @@ impl Editor {
                 if let Some(lsp) = &mut self.lsp {
                     lsp.allow_language(&language);
                     // Use force_spawn since user explicitly confirmed
-                    if lsp.force_spawn(&language, None).is_some() {
+                    if lsp.force_spawn(&language, file_path.as_deref()).is_some() {
                         tracing::info!("LSP server for {} started (always allowed)", language);
                         self.set_status_message(
                             t!("lsp.server_started_auto", language = language).to_string(),

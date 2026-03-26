@@ -15,12 +15,16 @@ impl Editor {
     /// Restarts the LSP server for the current buffer's language and re-sends
     /// didOpen notifications for all buffers of that language.
     pub fn handle_lsp_restart(&mut self) {
-        // Get the language from the buffer's stored state
+        // Get the language and file path from the active buffer
         let buffer_id = self.active_buffer();
         let Some(state) = self.buffers.get(&buffer_id) else {
             return;
         };
         let language = state.language.clone();
+        let file_path = self
+            .buffer_metadata
+            .get(&buffer_id)
+            .and_then(|meta| meta.file_path().cloned());
 
         // Check if LSP is configured for this language before attempting restart
         let lsp_configured = self
@@ -40,7 +44,7 @@ impl Editor {
             return;
         };
 
-        let (success, message) = lsp.manual_restart(&language);
+        let (success, message) = lsp.manual_restart(&language, file_path.as_deref());
         self.status_message = Some(message);
 
         if !success {

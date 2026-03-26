@@ -837,7 +837,7 @@ impl LspManager {
     ///
     /// Returns (success, message) tuple
     #[allow(clippy::let_underscore_must_use)] // shutdown() is best-effort cleanup before restart
-    pub fn manual_restart(&mut self, language: &str) -> (bool, String) {
+    pub fn manual_restart(&mut self, language: &str, file_path: Option<&Path>) -> (bool, String) {
         // Clear any existing state
         self.clear_cooldown(language);
 
@@ -855,7 +855,7 @@ impl LspManager {
         }
 
         // Spawn new server (bypassing auto_start for user-initiated restart)
-        if self.force_spawn(language, None).is_some() {
+        if self.force_spawn(language, file_path).is_some() {
             let message = format!("LSP server for {} started", language);
             tracing::info!("{}", message);
             (true, message)

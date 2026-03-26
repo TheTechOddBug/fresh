@@ -6511,8 +6511,12 @@ impl Editor {
             PluginCommand::RestartLspForLanguage { language } => {
                 tracing::info!("Plugin restarting LSP for language: {}", language);
 
+                let file_path = self
+                    .buffer_metadata
+                    .get(&self.active_buffer())
+                    .and_then(|meta| meta.file_path().cloned());
                 let success = if let Some(ref mut lsp) = self.lsp {
-                    let (ok, msg) = lsp.manual_restart(&language);
+                    let (ok, msg) = lsp.manual_restart(&language, file_path.as_deref());
                     self.status_message = Some(msg);
                     ok
                 } else {
