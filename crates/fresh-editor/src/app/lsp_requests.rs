@@ -1348,7 +1348,7 @@ impl Editor {
                 && self
                     .pending_code_actions
                     .as_ref()
-                    .map_or(true, |a| a.is_empty())
+                    .is_none_or(|a| a.is_empty())
             {
                 self.set_status_message(t!("lsp.no_code_actions").to_string());
             }

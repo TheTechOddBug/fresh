@@ -180,10 +180,8 @@ impl Editor {
                                 .did_open(uri.clone(), content.clone(), lang_id.clone())
                         {
                             tracing::warn!("LSP did_open to '{}' failed: {}", name, e);
-                        } else {
-                            if let Some(metadata) = self.buffer_metadata.get_mut(&buffer_id) {
-                                metadata.lsp_opened_with.insert(handle_id);
-                            }
+                        } else if let Some(metadata) = self.buffer_metadata.get_mut(&buffer_id) {
+                            metadata.lsp_opened_with.insert(handle_id);
                         }
                     }
                 }

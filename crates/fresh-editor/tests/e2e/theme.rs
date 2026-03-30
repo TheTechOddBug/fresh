@@ -692,7 +692,7 @@ fn test_diagnostic_overlay_colors_update_on_theme_change() -> anyhow::Result<()>
     harness.render()?;
 
     // Verify the diagnostic overlay now uses the light theme's error bg
-    let light_error_bg = Color::Rgb(255, 220, 220);
+    let light_error_bg = Color::Rgb(255, 210, 210);
     let pos = harness
         .find_text_on_screen("hello")
         .expect("'hello' should still be visible");

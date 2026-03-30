@@ -3142,9 +3142,9 @@ impl Editor {
                 // Set terminal cursor color to match theme
                 self.theme.set_terminal_cursor_color();
 
-                // Re-apply all stored diagnostics so overlay colors match the
-                // new theme (diagnostic overlays bake RGB at creation time).
-                self.reapply_all_diagnostics();
+                // Re-apply all overlays so colors match the new theme
+                // (diagnostic and semantic token overlays bake RGB at creation time).
+                self.reapply_all_overlays();
 
                 // Update the config in memory using the normalized registry key,
                 // not the JSON name field, so that the config value can be looked
@@ -3164,8 +3164,11 @@ impl Editor {
         }
     }
 
-    /// Re-apply all stored diagnostics with the current theme colors.
-    fn reapply_all_diagnostics(&mut self) {
+    /// Re-apply all stored diagnostics and semantic tokens with the current
+    /// theme colors. Both overlay types bake RGB values at creation time, so
+    /// they must be rebuilt when the theme changes.
+    fn reapply_all_overlays(&mut self) {
+        // --- Diagnostics ---
         crate::services::lsp::diagnostics::invalidate_cache_all();
         let entries: Vec<(String, Vec<lsp_types::Diagnostic>)> = self
             .stored_diagnostics
@@ -3183,6 +3186,25 @@ impl Editor {
                 }
             }
         }
+
+        // --- Semantic tokens ---
+        let buffer_ids: Vec<_> = self.buffers.keys().cloned().collect();
+        for buffer_id in buffer_ids {
+            let tokens = self
+                .buffers
+                .get(&buffer_id)
+                .and_then(|s| s.semantic_tokens.as_ref())
+                .map(|store| store.tokens.clone());
+            if let Some(tokens) = tokens {
+                if let Some(state) = self.buffers.get_mut(&buffer_id) {
+                    crate::services::lsp::semantic_tokens::apply_semantic_tokens_to_state(
+                        state,
+                        &tokens,
+                        &self.theme,
+                    );
+                }
+            }
+        }
     }
 
     /// Preview a theme by name (without persisting to config)
@@ -3192,7 +3214,7 @@ impl Editor {
             if let Some(theme) = self.theme_registry.get_cloned(theme_name) {
                 self.theme = theme;
                 self.theme.set_terminal_cursor_color();
-                self.reapply_all_diagnostics();
+                self.reapply_all_overlays();
             }
         }
     }
