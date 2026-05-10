@@ -5118,9 +5118,10 @@ impl Editor {
         left_split: SplitId,
         right_split: SplitId,
     ) {
-        let success =
-            self.scroll_sync_manager
-                .create_group_with_id(group_id, left_split, right_split);
+        let success = self
+            .active_window_mut()
+            .scroll_sync_manager
+            .create_group_with_id(group_id, left_split, right_split);
         if success {
             tracing::debug!(
                 "Created scroll sync group {} for splits {:?} and {:?}",
@@ -5150,7 +5151,9 @@ impl Editor {
                 right_line,
             })
             .collect();
-        self.scroll_sync_manager.set_anchors(group_id, sync_anchors);
+        self.active_window_mut()
+            .scroll_sync_manager
+            .set_anchors(group_id, sync_anchors);
         tracing::debug!(
             "Set {} anchors for scroll sync group {}",
             anchor_count,
@@ -5162,7 +5165,11 @@ impl Editor {
         &mut self,
         group_id: crate::view::scroll_sync::ScrollSyncGroupId,
     ) {
-        if self.scroll_sync_manager.remove_group(group_id) {
+        if self
+            .active_window_mut()
+            .scroll_sync_manager
+            .remove_group(group_id)
+        {
             tracing::debug!("Removed scroll sync group {}", group_id);
         } else {
             tracing::warn!("Scroll sync group {} not found", group_id);
