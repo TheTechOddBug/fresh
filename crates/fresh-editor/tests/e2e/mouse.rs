@@ -1964,8 +1964,7 @@ fn test_blinking_bar_selection_first_char_color() {
     let (content_first_row, _) = harness.content_area_rows();
 
     // Get the selection background color from the theme
-    let theme = harness.editor().theme();
-    let selection_bg = theme.selection_bg;
+    let selection_bg = harness.editor().theme().selection_bg;
 
     // Drag from end of line 2 to start of line 1 (upward and to the left)
     // This reproduces the bug scenario described in issue #614

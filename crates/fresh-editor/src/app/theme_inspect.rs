@@ -122,7 +122,7 @@ impl Editor {
     /// Looks up the per-cell theme key map populated during rendering.
     fn resolve_theme_key_at(&self, col: u16, row: u16) -> Option<ThemeKeyInfo> {
         let cell = self.chrome_layout.cell_theme_at(col, row)?;
-        let theme = &self.theme;
+        let theme = &*self.theme.read().unwrap();
 
         // Resolve actual colors from theme keys
         let fg_color = cell.fg_key.and_then(|k| theme.resolve_theme_key(k));
@@ -262,7 +262,7 @@ impl Editor {
             Some(p) => p,
             None => return,
         };
-        let theme = &self.theme;
+        let theme = &*self.theme.read().unwrap();
         let info = &popup.info;
 
         let mut lines = vec![];

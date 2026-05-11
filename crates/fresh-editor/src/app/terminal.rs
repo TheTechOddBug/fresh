@@ -939,8 +939,8 @@ impl Editor {
                             cursor_visible,
                             *content_rect,
                             frame.buffer_mut(),
-                            self.theme.terminal_fg,
-                            self.theme.terminal_bg,
+                            self.theme.read().unwrap().terminal_fg,
+                            self.theme.read().unwrap().terminal_bg,
                         );
                     }
                 }

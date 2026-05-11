@@ -40,6 +40,8 @@ impl crate::app::Editor {
             tokio_runtime: self.tokio_runtime.clone(),
             async_bridge: self.async_bridge.clone(),
             plugin_manager: std::sync::Arc::clone(&self.plugin_manager),
+            theme: std::sync::Arc::clone(&self.theme),
+            event_broadcaster: self.event_broadcaster.clone(),
         }
     }
 

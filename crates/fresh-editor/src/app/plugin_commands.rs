@@ -1003,7 +1003,7 @@ impl Editor {
                 &state.buffer,
                 range.start,
                 range.end,
-                &self.theme,
+                &*self.theme.read().unwrap(),
                 self.config.editor.highlight_context_bytes,
             );
 

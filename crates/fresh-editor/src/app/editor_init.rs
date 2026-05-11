@@ -112,7 +112,7 @@ pub(super) struct EditorParts {
     pub(super) working_dir: PathBuf,
 
     // Themes
-    pub(super) theme: crate::view::theme::Theme,
+    pub(super) theme: Arc<RwLock<crate::view::theme::Theme>>,
     pub(super) theme_registry: Arc<crate::view::theme::ThemeRegistry>,
     pub(super) theme_cache: Arc<RwLock<HashMap<String, serde_json::Value>>>,
 
@@ -163,6 +163,9 @@ pub(super) struct EditorParts {
     // `getGlobalState(...)` on first tick see the previous run's
     // values without a separate post-construction load step.
     pub(super) plugin_global_state: HashMap<String, HashMap<String, serde_json::Value>>,
+
+    /// Editor-wide event broadcaster, shared with every WindowResources.
+    pub(super) event_broadcaster: crate::model::control_event::EventBroadcaster,
 }
 
 impl Editor {
@@ -241,7 +244,7 @@ impl Editor {
             chrome_layout: ChromeLayout::default(),
             background_process_handles: HashMap::new(),
             host_process_handles: HashMap::new(),
-            event_broadcaster: crate::model::control_event::EventBroadcaster::default(),
+            event_broadcaster: parts.event_broadcaster,
             #[cfg(feature = "plugins")]
             pending_plugin_actions: Vec::new(),
             #[cfg(feature = "plugins")]
@@ -486,7 +489,7 @@ impl Editor {
         tracing::info!("Themes loaded");
 
         // Get active theme from registry, falling back to default if not found
-        let theme = theme_registry.get_cloned(&config.theme).unwrap_or_else(|| {
+        let theme_inner = theme_registry.get_cloned(&config.theme).unwrap_or_else(|| {
             tracing::warn!(
                 "Theme '{}' not found, falling back to default theme",
                 config.theme.0
@@ -499,7 +502,8 @@ impl Editor {
         });
 
         // Set terminal cursor color to match theme
-        theme.set_terminal_cursor_color();
+        theme_inner.set_terminal_cursor_color();
+        let theme = Arc::new(RwLock::new(theme_inner));
 
         t.phase("theme_setup");
         let keybindings = Arc::new(RwLock::new(KeybindingResolver::new(&config)));
@@ -592,6 +596,7 @@ impl Editor {
         // async expansion) flow through their owning window's
         // bridge instead — see `Window.bridge`.
         let async_bridge = AsyncBridge::new();
+        let event_broadcaster = crate::model::control_event::EventBroadcaster::default();
 
         // Create the base window's per-window bridge up front so the
         // LSP manager (configured below) can receive its responses
@@ -1034,6 +1039,8 @@ impl Editor {
             tokio_runtime: tokio_runtime.clone(),
             async_bridge: Some(async_bridge.clone()),
             plugin_manager: Arc::clone(&plugin_manager),
+            theme: Arc::clone(&theme),
+            event_broadcaster: event_broadcaster.clone(),
         };
 
         // Build the active window — the one that holds the seed
@@ -1109,6 +1116,8 @@ impl Editor {
                     tokio_runtime: tokio_runtime.clone(),
                     async_bridge: Some(async_bridge.clone()),
                     plugin_manager: Arc::clone(&plugin_manager),
+                    theme: Arc::clone(&theme),
+                    event_broadcaster: event_broadcaster.clone(),
                 };
                 let mut shell = crate::app::window::Window::new(
                     id,
@@ -1201,6 +1210,7 @@ impl Editor {
             update_checker,
             time_source: time_source.clone(),
             plugin_global_state,
+            event_broadcaster: event_broadcaster.clone(),
         };
 
         let mut editor = Editor::from_parts(parts);
@@ -1475,7 +1485,7 @@ impl Editor {
                 self.config = Arc::new(new_config);
                 if old_theme != self.config.theme {
                     if let Some(theme) = self.theme_registry.get_cloned(&self.config.theme) {
-                        self.theme = theme;
+                        *self.theme.write().unwrap() = theme;
                     }
                 }
                 *self.keybindings.write().unwrap() =

@@ -3160,14 +3160,14 @@ impl Editor {
         }
 
         // Create popup
-        let mut popup = Popup::text(lines, &self.theme);
+        let mut popup = Popup::text(lines, &*self.theme.read().unwrap());
         popup.title = Some("Git Status".to_string());
         popup.transient = true;
         popup.position = PopupPosition::Fixed { x: col, y: row + 1 };
         popup.width = 50;
         popup.max_height = 15;
-        popup.border_style = Style::default().fg(self.theme.popup_border_fg);
-        popup.background_style = Style::default().bg(self.theme.popup_bg);
+        popup.border_style = Style::default().fg(self.theme.read().unwrap().popup_border_fg);
+        popup.background_style = Style::default().bg(self.theme.read().unwrap().popup_bg);
 
         // Show the popup
         let __buffer_id = self.active_buffer();

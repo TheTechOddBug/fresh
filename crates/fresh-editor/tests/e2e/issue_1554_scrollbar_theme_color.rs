@@ -36,9 +36,10 @@ fn test_vertical_scrollbar_uses_theme_track_and_thumb_colors() {
     };
 
     let mut harness = EditorTestHarness::with_config(80, 24, config).unwrap();
-    let theme = harness.editor().theme();
-    let expected_track = theme.scrollbar_track_fg;
-    let expected_thumb = theme.scrollbar_thumb_fg;
+    let (expected_track, expected_thumb) = {
+        let theme = harness.editor().theme();
+        (theme.scrollbar_track_fg, theme.scrollbar_thumb_fg)
+    };
 
     harness.load_buffer_from_text(&long_content(200)).unwrap();
     harness.render().unwrap();
@@ -72,8 +73,7 @@ fn test_horizontal_scrollbar_uses_theme_track_color() {
     config.editor.show_horizontal_scrollbar = true;
 
     let mut harness = EditorTestHarness::with_config(80, 24, config).unwrap();
-    let theme = harness.editor().theme();
-    let expected_track = theme.scrollbar_track_fg;
+    let expected_track = harness.editor().theme().scrollbar_track_fg;
 
     let long_line_content: String = (0..50)
         .map(|i| format!("line {i}: {}", "X".repeat(200)))

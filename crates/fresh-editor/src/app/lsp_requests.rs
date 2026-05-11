@@ -1025,13 +1025,20 @@ impl Editor {
         let hover_lines: Vec<StyledLine> = if contents.is_empty() {
             Vec::new()
         } else if is_markdown {
-            parse_markdown(&contents, &self.theme, Some(&self.grammar_registry))
+            parse_markdown(
+                &contents,
+                &*self.theme.read().unwrap(),
+                Some(&self.grammar_registry),
+            )
         } else {
             contents
                 .lines()
                 .map(|s| {
                     let mut sl = StyledLine::new();
-                    sl.push(s.to_string(), Style::default().fg(self.theme.popup_text_fg));
+                    sl.push(
+                        s.to_string(),
+                        Style::default().fg(self.theme.read().unwrap().popup_text_fg),
+                    );
                     sl
                 })
                 .collect()
@@ -1047,7 +1054,7 @@ impl Editor {
             let mut sep = StyledLine::new();
             sep.push(
                 "─".repeat(12),
-                Style::default().fg(self.theme.popup_border_fg),
+                Style::default().fg(self.theme.read().unwrap().popup_border_fg),
             );
             all_lines.push(sep);
         }
@@ -1080,7 +1087,7 @@ impl Editor {
         let dynamic_height = (self.terminal_height * 60 / 100).clamp(15, 40);
 
         // Construct the popup with the fused content.
-        let mut popup = Popup::text(Vec::new(), &self.theme);
+        let mut popup = Popup::text(Vec::new(), &*self.theme.read().unwrap());
         popup.content = PopupContent::Markdown(all_lines);
         popup.title = Some(t!("lsp.popup_hover").to_string());
         popup.transient = true;
@@ -1092,8 +1099,8 @@ impl Editor {
         };
         popup.width = popup_width;
         popup.max_height = dynamic_height;
-        popup.border_style = Style::default().fg(self.theme.popup_border_fg);
-        popup.background_style = Style::default().bg(self.theme.popup_bg);
+        popup.border_style = Style::default().fg(self.theme.read().unwrap().popup_border_fg);
+        popup.background_style = Style::default().bg(self.theme.read().unwrap().popup_bg);
         popup.focus_key_hint = self.popup_focus_key_hint();
 
         // Show the popup. Replace any existing transient (hover/signature)
@@ -1165,15 +1172,21 @@ impl Editor {
             }
 
             let (label, marker, severity_color) = match diag.severity {
-                Some(DiagnosticSeverity::ERROR) => ("Error", "✖", self.theme.diagnostic_error_fg),
-                Some(DiagnosticSeverity::WARNING) => {
-                    ("Warning", "⚠", self.theme.diagnostic_warning_fg)
+                Some(DiagnosticSeverity::ERROR) => {
+                    ("Error", "✖", self.theme.read().unwrap().diagnostic_error_fg)
                 }
+                Some(DiagnosticSeverity::WARNING) => (
+                    "Warning",
+                    "⚠",
+                    self.theme.read().unwrap().diagnostic_warning_fg,
+                ),
                 Some(DiagnosticSeverity::INFORMATION) => {
-                    ("Info", "ℹ", self.theme.diagnostic_info_fg)
+                    ("Info", "ℹ", self.theme.read().unwrap().diagnostic_info_fg)
                 }
-                Some(DiagnosticSeverity::HINT) => ("Hint", "ℹ", self.theme.diagnostic_hint_fg),
-                _ => ("Diagnostic", "•", self.theme.popup_text_fg),
+                Some(DiagnosticSeverity::HINT) => {
+                    ("Hint", "ℹ", self.theme.read().unwrap().diagnostic_hint_fg)
+                }
+                _ => ("Diagnostic", "•", self.theme.read().unwrap().popup_text_fg),
             };
 
             let header_style = Style::default()
@@ -1187,7 +1200,7 @@ impl Editor {
                 header.push(
                     format!("  ({})", source),
                     Style::default()
-                        .fg(self.theme.tab_inactive_fg)
+                        .fg(self.theme.read().unwrap().tab_inactive_fg)
                         .add_modifier(Modifier::ITALIC),
                 );
             }
@@ -1200,7 +1213,7 @@ impl Editor {
                 let mut line = StyledLine::new();
                 line.push(
                     message_line.to_string(),
-                    Style::default().fg(self.theme.popup_text_fg),
+                    Style::default().fg(self.theme.read().unwrap().popup_text_fg),
                 );
                 out.push(line);
             }
@@ -1497,14 +1510,18 @@ impl Editor {
         use crate::view::popup::{Popup, PopupPosition};
         use ratatui::style::Style;
 
-        let mut popup = Popup::markdown(&content, &self.theme, Some(&self.grammar_registry));
+        let mut popup = Popup::markdown(
+            &content,
+            &*self.theme.read().unwrap(),
+            Some(&self.grammar_registry),
+        );
         popup.title = Some(t!("lsp.popup_signature").to_string());
         popup.transient = true;
         popup.position = PopupPosition::BelowCursor;
         popup.width = 60;
         popup.max_height = 20;
-        popup.border_style = Style::default().fg(self.theme.popup_border_fg);
-        popup.background_style = Style::default().bg(self.theme.popup_bg);
+        popup.border_style = Style::default().fg(self.theme.read().unwrap().popup_border_fg);
+        popup.background_style = Style::default().bg(self.theme.read().unwrap().popup_bg);
         popup.focus_key_hint = self.popup_focus_key_hint();
 
         // Show the popup
@@ -1743,14 +1760,14 @@ impl Editor {
                 .collect()
         };
 
-        let mut popup = Popup::list(items, &self.theme);
+        let mut popup = Popup::list(items, &*self.theme.read().unwrap());
         popup.kind = crate::view::popup::PopupKind::Action;
         popup.title = Some(t!("lsp.popup_code_actions").to_string());
         popup.position = PopupPosition::BelowCursor;
         popup.width = 60;
         popup.max_height = 15;
-        popup.border_style = Style::default().fg(self.theme.popup_border_fg);
-        popup.background_style = Style::default().bg(self.theme.popup_bg);
+        popup.border_style = Style::default().fg(self.theme.read().unwrap().popup_border_fg);
+        popup.background_style = Style::default().bg(self.theme.read().unwrap().popup_bg);
         // Confirm reads the selected row's `data` as an index into
         // `self.active_window_mut().pending_code_actions` — the heavy lsp_types payload
         // stays on the Editor to keep the view crate LSP-free.

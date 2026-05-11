@@ -378,7 +378,7 @@ impl Editor {
         // Apply theme change if needed
         if old_theme != self.config.theme {
             if let Some(theme) = self.theme_registry.get_cloned(&self.config.theme) {
-                self.theme = theme;
+                *self.theme.write().unwrap() = theme;
                 tracing::info!("Theme changed to '{}'", self.config.theme.0);
             } else {
                 tracing::error!("Theme '{}' not found", self.config.theme.0);
@@ -444,7 +444,7 @@ impl Editor {
 
         // Re-apply current theme if it still exists, otherwise it might have been updated
         if let Some(theme) = self.theme_registry.get_cloned(&self.config.theme) {
-            self.theme = theme;
+            *self.theme.write().unwrap() = theme;
         }
 
         tracing::info!(

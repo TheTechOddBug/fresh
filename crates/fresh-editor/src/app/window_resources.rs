@@ -182,6 +182,15 @@ pub struct WindowResources {
     /// few `&mut self` methods (process_commands, check_thread_health,
     /// test_inject_command) take a write lock.
     pub plugin_manager: Arc<RwLock<crate::services::plugins::manager::PluginManager>>,
+
+    /// Active resolved theme, mirrored from `Editor.theme`. Each
+    /// `set_theme` / theme-reload pushes the new value into this
+    /// `Arc<RwLock<>>` so Window methods can read colors without
+    /// going through Editor.
+    pub theme: Arc<RwLock<crate::view::theme::Theme>>,
+
+    /// Editor-wide event broadcaster (cloneable, Arc inside).
+    pub event_broadcaster: crate::model::control_event::EventBroadcaster,
 }
 
 /// Cross-window orchestration events that a `Window` handler returns to

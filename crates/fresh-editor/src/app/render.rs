@@ -333,7 +333,7 @@ impl Editor {
                     &__win.file_explorer_decoration_cache,
                     &keybindings,
                     key_context_clone,
-                    &self.theme,
+                    &*self.theme.read().unwrap(),
                     close_button_hovered,
                     remote_connection.as_deref(),
                     cut_paths,
@@ -714,7 +714,7 @@ impl Editor {
             __event_logs_mut,
             __composite_buffers_mut,
             __composite_view_states_mut,
-            &self.theme,
+            &*self.theme.read().unwrap(),
             self.ansi_background.as_ref(),
             self.background_fade,
             lsp_waiting,
@@ -952,7 +952,7 @@ impl Editor {
             &self.config.lsp,
             &self.active_window().user_dismissed_lsp_languages,
         );
-        let theme = self.theme.clone();
+        let theme = self.theme.read().unwrap().clone();
         let keybindings_cloned = self.keybindings.read().unwrap().clone(); // Clone the keybindings
         let chord_state_cloned = self.active_window_mut().chord_state.clone(); // Clone the chord state
 
@@ -1188,7 +1188,7 @@ impl Editor {
 
         // Render popups from the active buffer state
         // Clone theme to avoid borrow checker issues with active_state_mut()
-        let theme_clone = self.theme.clone();
+        let theme_clone = self.theme.read().unwrap().clone();
         let hover_target = self.active_window_mut().mouse_state.hover_target.clone();
 
         // Clear popup areas and recalculate
@@ -1432,7 +1432,7 @@ impl Editor {
                     frame,
                     size,
                     settings_state,
-                    &self.theme,
+                    &*self.theme.read().unwrap(),
                 );
                 self.chrome_layout.settings_layout = Some(settings_layout);
             }
@@ -1446,7 +1446,7 @@ impl Editor {
                 frame,
                 size,
                 wizard,
-                &self.theme,
+                &*self.theme.read().unwrap(),
             );
         }
 
@@ -1457,7 +1457,7 @@ impl Editor {
                 frame,
                 size,
                 kb_editor,
-                &self.theme,
+                &*self.theme.read().unwrap(),
             );
         }
 
@@ -1465,7 +1465,12 @@ impl Editor {
         if let Some(ref debug) = self.event_debug {
             // Dim the editor content behind the dialog modal
             crate::view::dimming::apply_dimming(frame, size);
-            crate::view::event_debug::render_event_debug(frame, size, debug, &self.theme);
+            crate::view::event_debug::render_event_debug(
+                frame,
+                size,
+                debug,
+                &*self.theme.read().unwrap(),
+            );
         }
 
         if self.active_window_mut().menu_bar_visible {
@@ -1487,7 +1492,7 @@ impl Editor {
                 expanded,
                 &self.menu_state,
                 &keybindings,
-                &self.theme,
+                &*self.theme.read().unwrap(),
                 hover_target.as_ref(),
                 menu_bar_mnemonics,
             ));
@@ -1662,8 +1667,8 @@ impl Editor {
             self.active_window_mut().animations.cancel(prev_anim);
         }
 
-        let cursor_color = self.theme.cursor;
-        let bg_color = self.theme.editor_bg;
+        let cursor_color = self.theme.read().unwrap().cursor;
+        let bg_color = self.theme.read().unwrap().editor_bg;
         let id = self.active_window_mut().animations.start(
             // The bounding box is for runner bookkeeping only — CursorJump
             // paints at absolute screen coords and ignores `area`.
@@ -1789,7 +1794,7 @@ impl Editor {
             PromptType::OpenFile | PromptType::SwitchProject | PromptType::SaveFileAs
         ) {
             let hover_target = self.active_window().mouse_state.hover_target.clone();
-            let theme = self.theme.clone();
+            let theme = self.theme.read().unwrap().clone();
             let keybindings = self.keybindings.read().unwrap();
             let kb_clone = keybindings.clone();
             drop(keybindings);
@@ -1846,7 +1851,7 @@ impl Editor {
             frame,
             suggestions_area,
             prompt,
-            &self.theme,
+            &*self.theme.read().unwrap(),
             self.active_window().mouse_state.hover_target.as_ref(),
             true,
         );
@@ -1862,7 +1867,7 @@ impl Editor {
                 height: hints_height,
             };
             frame.render_widget(ratatui::widgets::Clear, hints_area);
-            Self::render_quick_open_hints(frame, hints_area, &self.theme);
+            Self::render_quick_open_hints(frame, hints_area, &*self.theme.read().unwrap());
         }
     }
 
@@ -2360,7 +2365,7 @@ impl Editor {
         };
 
         // Snapshot view-relevant state before any mutable borrows.
-        let theme = self.theme.clone();
+        let theme = self.theme.read().unwrap().clone();
         // The suggestion list inside the overlay can be ~30 rows
         // tall on a typical terminal. Pass the *actual* visible
         // count to `ensure_selected_visible_within` so the scroll
@@ -2845,7 +2850,11 @@ impl Editor {
                 // Highlight the separator with hover color
                 for (sid, dir, x, y, length) in &self.active_layout().separator_areas {
                     if sid == split_id && dir == direction {
-                        let hover_style = Style::default().fg(self.theme.split_separator_hover_fg);
+                        let hover_style = Style::default().fg(self
+                            .theme
+                            .read()
+                            .unwrap()
+                            .split_separator_hover_fg);
                         match dir {
                             SplitDirection::Horizontal => {
                                 let line_text = "─".repeat(*length as usize);
@@ -2875,7 +2884,11 @@ impl Editor {
                     &self.active_layout().split_areas
                 {
                     if sid == split_id {
-                        let hover_style = Style::default().bg(self.theme.scrollbar_thumb_hover_fg);
+                        let hover_style = Style::default().bg(self
+                            .theme
+                            .read()
+                            .unwrap()
+                            .scrollbar_thumb_hover_fg);
                         for row_offset in *thumb_start..*thumb_end {
                             let paragraph = Paragraph::new(Span::styled(" ", hover_style));
                             frame.render_widget(
@@ -2897,8 +2910,11 @@ impl Editor {
                     &self.active_layout().split_areas
                 {
                     if sid == split_id {
-                        let track_hover_style =
-                            Style::default().bg(self.theme.scrollbar_track_hover_fg);
+                        let track_hover_style = Style::default().bg(self
+                            .theme
+                            .read()
+                            .unwrap()
+                            .scrollbar_track_hover_fg);
                         let paragraph = Paragraph::new(Span::styled(" ", track_hover_style));
                         frame.render_widget(
                             paragraph,
@@ -2915,7 +2931,8 @@ impl Editor {
             Some(HoverTarget::FileExplorerBorder) => {
                 // Highlight the file explorer border for resize
                 if let Some(explorer_area) = self.active_layout().file_explorer_area {
-                    let hover_style = Style::default().fg(self.theme.split_separator_hover_fg);
+                    let hover_style =
+                        Style::default().fg(self.theme.read().unwrap().split_separator_hover_fg);
                     let border_x = explorer_area.x + explorer_area.width.saturating_sub(1);
                     for row_offset in 0..explorer_area.height {
                         let paragraph = Paragraph::new(Span::styled("│", hover_style));
@@ -2974,12 +2991,12 @@ impl Editor {
 
             let style = if is_highlighted {
                 Style::default()
-                    .fg(self.theme.menu_highlight_fg)
-                    .bg(self.theme.menu_highlight_bg)
+                    .fg(self.theme.read().unwrap().menu_highlight_fg)
+                    .bg(self.theme.read().unwrap().menu_highlight_bg)
             } else {
                 Style::default()
-                    .fg(self.theme.menu_dropdown_fg)
-                    .bg(self.theme.menu_dropdown_bg)
+                    .fg(self.theme.read().unwrap().menu_dropdown_fg)
+                    .bg(self.theme.read().unwrap().menu_dropdown_bg)
             };
 
             // Pad the label to fill the menu width
@@ -2992,8 +3009,8 @@ impl Editor {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.menu_border_fg))
-            .style(Style::default().bg(self.theme.menu_dropdown_bg));
+            .border_style(Style::default().fg(self.theme.read().unwrap().menu_border_fg))
+            .style(Style::default().bg(self.theme.read().unwrap().menu_dropdown_bg));
 
         let paragraph = Paragraph::new(lines).block(block);
         frame.render_widget(paragraph, area);
@@ -3024,12 +3041,12 @@ impl Editor {
 
             let style = if is_highlighted {
                 Style::default()
-                    .fg(self.theme.menu_highlight_fg)
-                    .bg(self.theme.menu_highlight_bg)
+                    .fg(self.theme.read().unwrap().menu_highlight_fg)
+                    .bg(self.theme.read().unwrap().menu_highlight_bg)
             } else {
                 Style::default()
-                    .fg(self.theme.menu_dropdown_fg)
-                    .bg(self.theme.menu_dropdown_bg)
+                    .fg(self.theme.read().unwrap().menu_dropdown_fg)
+                    .bg(self.theme.read().unwrap().menu_dropdown_bg)
             };
 
             let label = item.label();
@@ -3041,8 +3058,8 @@ impl Editor {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.menu_border_fg))
-            .style(Style::default().bg(self.theme.menu_dropdown_bg));
+            .border_style(Style::default().fg(self.theme.read().unwrap().menu_border_fg))
+            .style(Style::default().bg(self.theme.read().unwrap().menu_dropdown_bg));
 
         let paragraph = Paragraph::new(lines).block(block);
         frame.render_widget(paragraph, area);
@@ -3116,8 +3133,8 @@ impl Editor {
         // Draw the overlay with the drop zone color
         // We apply a semi-transparent effect by modifying existing cells
         let buf = frame.buffer_mut();
-        let drop_zone_bg = self.theme.tab_drop_zone_bg;
-        let drop_zone_border = self.theme.tab_drop_zone_border;
+        let drop_zone_bg = self.theme.read().unwrap().tab_drop_zone_bg;
+        let drop_zone_border = self.theme.read().unwrap().tab_drop_zone_border;
 
         // Fill the highlight area with a semi-transparent overlay
         for y in highlight_area.y..highlight_area.y + highlight_area.height {
@@ -3273,7 +3290,7 @@ impl Editor {
             split_mgr_l,
             __buffers_l,
             split_view_states_l,
-            &self.theme,
+            &*self.theme.read().unwrap(),
             false, // lsp_waiting — not relevant for layout
             self.config.editor.estimated_line_length,
             self.config.editor.highlight_context_bytes,

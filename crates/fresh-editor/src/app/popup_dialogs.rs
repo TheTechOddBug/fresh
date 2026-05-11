@@ -567,8 +567,8 @@ impl Editor {
             width: popup_width,
             max_height: 15,
             bordered: true,
-            border_style: Style::default().fg(self.theme.popup_border_fg),
-            background_style: Style::default().bg(self.theme.popup_bg),
+            border_style: Style::default().fg(self.theme.read().unwrap().popup_border_fg),
+            background_style: Style::default().bg(self.theme.read().unwrap().popup_bg),
             scroll_offset: 0,
             text_selection: None,
             accept_key_hint: None,
@@ -833,8 +833,8 @@ impl Editor {
             width: popup_width.clamp(28, 50),
             max_height: 10,
             bordered: true,
-            border_style: Style::default().fg(self.theme.popup_border_fg),
-            background_style: Style::default().bg(self.theme.popup_bg),
+            border_style: Style::default().fg(self.theme.read().unwrap().popup_border_fg),
+            background_style: Style::default().bg(self.theme.read().unwrap().popup_bg),
             scroll_offset: 0,
             text_selection: None,
             accept_key_hint: None,
@@ -942,13 +942,17 @@ impl Editor {
         let hint_width = 16u16; // "*esc to dismiss*"
         let popup_width = (content_width.max(hint_width) + 4).clamp(20, 60);
 
-        let mut popup = Popup::markdown(&md, &self.theme, Some(&self.grammar_registry));
+        let mut popup = Popup::markdown(
+            &md,
+            &*self.theme.read().unwrap(),
+            Some(&self.grammar_registry),
+        );
         popup.transient = false;
         popup.position = PopupPosition::BelowCursor;
         popup.width = popup_width;
         popup.max_height = 15;
-        popup.border_style = Style::default().fg(self.theme.popup_border_fg);
-        popup.background_style = Style::default().bg(self.theme.popup_bg);
+        popup.border_style = Style::default().fg(self.theme.read().unwrap().popup_border_fg);
+        popup.background_style = Style::default().bg(self.theme.read().unwrap().popup_bg);
 
         let buffer_id = self.active_buffer();
         if let Some(state) = self

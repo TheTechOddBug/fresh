@@ -34,8 +34,8 @@ impl Editor {
     /// Update search highlights in visible viewport only (for incremental search)
     /// This is called as the user types in the search prompt for real-time feedback
     pub(super) fn update_search_highlights(&mut self, query: &str) {
-        let search_bg = self.theme.search_match_bg;
-        let search_fg = self.theme.search_match_fg;
+        let search_bg = self.theme.read().unwrap().search_match_bg;
+        let search_fg = self.theme.read().unwrap().search_match_fg;
         self.active_window_mut()
             .update_search_highlights(query, search_fg, search_bg);
     }
@@ -184,8 +184,8 @@ impl Editor {
             self.refresh_search_overlays();
         } else {
             // Small file: overlays for ALL matches so markers auto-track edits
-            let search_bg = self.theme.search_match_bg;
-            let search_fg = self.theme.search_match_fg;
+            let search_bg = self.theme.read().unwrap().search_match_bg;
+            let search_fg = self.theme.read().unwrap().search_match_fg;
             let ns = self.active_window().search_namespace.clone();
             let state = self.active_state_mut();
             state.overlays.clear_namespace(&ns, &mut state.marker_list);
@@ -242,8 +242,8 @@ impl Editor {
     /// so it is O(log N + visible_matches) regardless of total match count.
     pub(super) fn refresh_search_overlays(&mut self) {
         let _span = tracing::info_span!("refresh_search_overlays").entered();
-        let search_bg = self.theme.search_match_bg;
-        let search_fg = self.theme.search_match_fg;
+        let search_bg = self.theme.read().unwrap().search_match_bg;
+        let search_fg = self.theme.read().unwrap().search_match_fg;
         let ns = self.active_window().search_namespace.clone();
 
         // Determine the visible byte range from the active viewport

@@ -401,10 +401,10 @@ impl Editor {
     pub(super) fn apply_theme(&mut self, key_or_name: &str) {
         if !key_or_name.is_empty() {
             if let Some(theme) = self.theme_registry.get_cloned(key_or_name) {
-                self.theme = theme;
+                *self.theme.write().unwrap() = theme;
 
                 // Set terminal cursor color to match theme
-                self.theme.set_terminal_cursor_color();
+                self.theme.read().unwrap().set_terminal_cursor_color();
 
                 // Re-apply all overlays so colors match the new theme
                 // (diagnostic and semantic token overlays bake RGB at creation time).
@@ -433,7 +433,11 @@ impl Editor {
                 self.save_theme_to_config();
 
                 self.set_status_message(
-                    t!("view.theme_changed", theme = self.theme.name.clone()).to_string(),
+                    t!(
+                        "view.theme_changed",
+                        theme = self.theme.read().unwrap().name.clone()
+                    )
+                    .to_string(),
                 );
             } else {
                 self.set_status_message(format!("Theme '{}' not found", key_or_name));
@@ -465,7 +469,7 @@ impl Editor {
                     crate::services::lsp::diagnostics::apply_diagnostics_to_state_cached(
                         state,
                         &diagnostics,
-                        &self.theme,
+                        &*self.theme.read().unwrap(),
                     );
                 }
             }
@@ -497,7 +501,7 @@ impl Editor {
                     crate::services::lsp::semantic_tokens::apply_semantic_tokens_to_state(
                         state,
                         &tokens,
-                        &self.theme,
+                        &*self.theme.read().unwrap(),
                     );
                 }
             }
@@ -509,9 +513,9 @@ impl Editor {
     pub(super) fn preview_theme(&mut self, key_or_name: &str) {
         if !key_or_name.is_empty() {
             if let Some(theme) = self.theme_registry.get_cloned(key_or_name) {
-                if theme.name != self.theme.name {
-                    self.theme = theme;
-                    self.theme.set_terminal_cursor_color();
+                if theme.name != self.theme.read().unwrap().name {
+                    *self.theme.write().unwrap() = theme;
+                    self.theme.read().unwrap().set_terminal_cursor_color();
                     self.reapply_all_overlays();
                 }
             }

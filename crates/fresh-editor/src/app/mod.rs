@@ -416,7 +416,10 @@ pub struct Editor {
     pending_grammar_callbacks: Vec<fresh_core::api::JsCallbackId>,
 
     /// Active theme
-    theme: crate::view::theme::Theme,
+    /// Active resolved theme, shared with windows via WindowResources.
+    /// Wrapped in `Arc<RwLock<>>` so a theme reload propagates to every
+    /// window without copying.
+    pub(crate) theme: Arc<RwLock<crate::view::theme::Theme>>,
 
     /// All loaded themes (embedded + user). Held as `Arc` so
     /// `expanded_menus_cache` can detect a registry swap via `Arc::ptr_eq`.

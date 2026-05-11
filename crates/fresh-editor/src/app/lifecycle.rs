@@ -140,9 +140,9 @@ impl Editor {
         self.should_quit = true;
     }
 
-    /// Get the active theme
-    pub fn theme(&self) -> &crate::view::theme::Theme {
-        &self.theme
+    /// Get the active theme (read lock).
+    pub fn theme(&self) -> std::sync::RwLockReadGuard<'_, crate::view::theme::Theme> {
+        self.theme.read().unwrap()
     }
 
     /// Check if the settings dialog is open and visible
