@@ -2390,6 +2390,19 @@ interface EditorAPI {
 	*/
 	widgetMutate(panelId: number, mutationObj: unknown): boolean;
 	/**
+	* Mount a declarative widget panel as a centered floating
+	* overlay (not bound to any virtual buffer).
+	*/
+	mountFloatingWidget(panelId: number, specObj: unknown, widthPct: number, heightPct: number): boolean;
+	/**
+	* Replace the spec of the currently-mounted floating widget panel.
+	*/
+	updateFloatingWidget(panelId: number, specObj: unknown): boolean;
+	/**
+	* Tear down the floating widget panel.
+	*/
+	unmountFloatingWidget(panelId: number): boolean;
+	/**
 	* Spawn a process (async, returns request_id)
 	*/
 	spawnProcess(command: string, args: string[], cwd?: string): ProcessHandle<SpawnResult>;

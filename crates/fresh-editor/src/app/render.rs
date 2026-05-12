@@ -1596,6 +1596,13 @@ impl Editor {
         self.active_window_mut()
             .animations
             .apply_all(frame.buffer_mut());
+
+        // Floating widget panel is drawn last so it sits above every
+        // other layer (prompts, popups, animations).
+        if self.floating_widget_panel.is_some() {
+            let frame_area = frame.area();
+            self.render_floating_widget_panel(frame, frame_area);
+        }
     }
 
     /// Compare the hardware cursor's screen position to the previous frame's
@@ -2336,7 +2343,6 @@ impl Editor {
     /// `ratatui` overdraw, so dismissing leaves the user's underlying
     /// layout exactly as it was (the issue-#1796 acceptance test).
     fn render_overlay_prompt(&mut self, frame: &mut Frame, area: ratatui::layout::Rect) {
-        use crate::view::popup::PopupPosition;
         use ratatui::layout::Rect;
         use ratatui::style::{Modifier, Style};
         use ratatui::text::{Line, Span};
@@ -2344,30 +2350,7 @@ impl Editor {
 
         // Compute the overlay rect via the same percentage logic the
         // popup engine uses. 80% × 80% of the terminal, centred.
-        let overlay_pos = PopupPosition::CenteredOverlay {
-            width_pct: 80,
-            height_pct: 80,
-        };
-        let overlay_rect = match overlay_pos {
-            PopupPosition::CenteredOverlay {
-                width_pct,
-                height_pct,
-            } => {
-                let w_pct = width_pct.clamp(1, 100) as u32;
-                let h_pct = height_pct.clamp(1, 100) as u32;
-                let w = ((area.width as u32 * w_pct) / 100) as u16;
-                let h = ((area.height as u32 * h_pct) / 100) as u16;
-                let w = w.max(20).min(area.width);
-                let h = h.max(8).min(area.height);
-                Rect {
-                    x: (area.width.saturating_sub(w)) / 2,
-                    y: (area.height.saturating_sub(h)) / 2,
-                    width: w,
-                    height: h,
-                }
-            }
-            _ => unreachable!(),
-        };
+        let overlay_rect = Self::centered_overlay_rect(area, 80, 80);
 
         // Snapshot view-relevant state before any mutable borrows.
         let theme = self.theme.read().unwrap().clone();
@@ -3372,6 +3355,102 @@ impl Editor {
     /// `OverlayFace::from_options` + char_style.rs do for buffer
     /// overlays — pulled here so the prompt-frame renderer can build
     /// styled spans inline.
+    /// Compute a centered overlay rect of `width_pct` × `height_pct`
+    /// of the given area. Mirrors `PopupPosition::CenteredOverlay`
+    /// math used by `render_overlay_prompt`; minimum 20×8 cells so
+    /// content stays legible on tiny terminals.
+    pub(super) fn centered_overlay_rect(
+        area: ratatui::layout::Rect,
+        width_pct: u8,
+        height_pct: u8,
+    ) -> ratatui::layout::Rect {
+        let w_pct = width_pct.clamp(1, 100) as u32;
+        let h_pct = height_pct.clamp(1, 100) as u32;
+        let w = ((area.width as u32 * w_pct) / 100) as u16;
+        let h = ((area.height as u32 * h_pct) / 100) as u16;
+        let w = w.max(20).min(area.width);
+        let h = h.max(8).min(area.height);
+        ratatui::layout::Rect {
+            x: area.x + (area.width.saturating_sub(w)) / 2,
+            y: area.y + (area.height.saturating_sub(h)) / 2,
+            width: w,
+            height: h,
+        }
+    }
+
+    /// Render the currently-mounted floating widget panel: dim the
+    /// background outside the centered rect, draw the frame, paint
+    /// the panel's rendered entries inside, and place the hardware
+    /// caret at the focused TextInput. Stores the inner rect on the
+    /// `FloatingWidgetState` so the click hit-test can recover the
+    /// geometry on the next mouse event.
+    pub(super) fn render_floating_widget_panel(
+        &mut self,
+        frame: &mut Frame,
+        area: ratatui::layout::Rect,
+    ) {
+        use ratatui::widgets::{Block, Borders, Clear};
+
+        let (width_pct, height_pct, entries, focus_cursor) =
+            match self.floating_widget_panel.as_ref() {
+                Some(fwp) => (
+                    fwp.width_pct,
+                    fwp.height_pct,
+                    fwp.entries.clone(),
+                    fwp.focus_cursor,
+                ),
+                None => return,
+            };
+        let theme = self.theme.read().unwrap().clone();
+        let overlay_rect = Self::centered_overlay_rect(area, width_pct, height_pct);
+
+        crate::view::dimming::apply_dimming_excluding(frame, area, Some(overlay_rect));
+        frame.render_widget(Clear, overlay_rect);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(ratatui::style::Style::default().fg(theme.popup_border_fg))
+            .style(ratatui::style::Style::default().bg(theme.suggestion_bg));
+        let inner = block.inner(overlay_rect);
+        frame.render_widget(block, overlay_rect);
+
+        if inner.width == 0 || inner.height == 0 {
+            if let Some(fwp) = self.floating_widget_panel.as_mut() {
+                fwp.last_inner_rect = Some(inner);
+            }
+            return;
+        }
+
+        let max_rows = inner.height as usize;
+        for (i, entry) in entries.iter().take(max_rows).enumerate() {
+            paint_text_property_entry(
+                frame,
+                entry,
+                inner.x,
+                inner.y + i as u16,
+                inner.width,
+                &theme,
+            );
+        }
+
+        if let Some(fc) = focus_cursor {
+            let cx = inner.x.saturating_add(byte_to_screen_col(
+                entries
+                    .get(fc.buffer_row as usize)
+                    .map(|e| e.text.as_str())
+                    .unwrap_or(""),
+                fc.byte_in_row as usize,
+            ) as u16);
+            let cy = inner.y.saturating_add(fc.buffer_row as u16);
+            if cx < inner.x + inner.width && cy < inner.y + inner.height {
+                frame.set_cursor_position((cx, cy));
+            }
+        }
+
+        if let Some(fwp) = self.floating_widget_panel.as_mut() {
+            fwp.last_inner_rect = Some(inner);
+        }
+    }
+
     fn resolve_overlay_style(
         opts: &fresh_core::api::OverlayOptions,
         theme: &crate::view::theme::Theme,
@@ -3418,4 +3497,100 @@ impl Editor {
         }
         style
     }
+}
+
+/// Paint a single rendered widget entry into the frame buffer at
+/// `(x, y)` over `width` cells. Resolves the entry's segments / inline
+/// overlays to styled spans using the panel's theme; trailing columns
+/// are filled with spaces in the panel's bg so the row reads as one
+/// solid line.
+fn paint_text_property_entry(
+    frame: &mut ratatui::Frame,
+    entry: &fresh_core::text_property::TextPropertyEntry,
+    x: u16,
+    y: u16,
+    width: u16,
+    theme: &crate::view::theme::Theme,
+) {
+    use ratatui::style::Style;
+    use ratatui::text::{Line, Span};
+    use ratatui::widgets::Paragraph;
+
+    let mut normalized = entry.clone();
+    normalized.normalize_widths();
+    let mut text = normalized.text.clone();
+    while text.ends_with('\n') {
+        text.pop();
+    }
+
+    let base_bg = theme.suggestion_bg;
+    let base_style = if let Some(opts) = normalized.style.as_ref() {
+        Editor::resolve_overlay_style(opts, theme).bg(base_bg)
+    } else {
+        Style::default().bg(base_bg)
+    };
+
+    // Split the line at inline-overlay byte boundaries so each
+    // resulting span carries one consistent style. The overlays are
+    // produced in declaration order by the widget renderer; later
+    // overlays override earlier ones for any cells they cover.
+    let boundaries: std::collections::BTreeSet<usize> = std::iter::once(0)
+        .chain(std::iter::once(text.len()))
+        .chain(
+            normalized
+                .inline_overlays
+                .iter()
+                .flat_map(|o| [o.start.min(text.len()), o.end.min(text.len())]),
+        )
+        .collect();
+    let bounds: Vec<usize> = boundaries.into_iter().collect();
+
+    let mut spans: Vec<Span<'_>> = Vec::new();
+    for win in bounds.windows(2) {
+        let (a, b) = (win[0], win[1]);
+        if a >= b {
+            continue;
+        }
+        let slice = text[a..b].to_string();
+        let mut style = base_style;
+        for o in &normalized.inline_overlays {
+            let os = o.start.min(text.len());
+            let oe = o.end.min(text.len());
+            if a >= os && b <= oe && oe > os {
+                style = Editor::resolve_overlay_style(&o.style, theme).bg(
+                    Editor::resolve_overlay_style(&o.style, theme)
+                        .bg
+                        .unwrap_or(base_bg),
+                );
+            }
+        }
+        spans.push(Span::styled(slice, style));
+    }
+
+    let line = Line::from(spans);
+    let rect = ratatui::layout::Rect {
+        x,
+        y,
+        width,
+        height: 1,
+    };
+    frame.render_widget(Paragraph::new(line).style(base_style), rect);
+}
+
+/// Translate a UTF-8 byte offset within a rendered line into a
+/// display-column offset, walking codepoints with their Unicode
+/// width. Used to place the hardware caret on the focused
+/// TextInput's byte position.
+fn byte_to_screen_col(text: &str, target_byte: usize) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    let mut byte = 0;
+    let mut col = 0usize;
+    for ch in text.chars() {
+        if byte >= target_byte {
+            break;
+        }
+        col += UnicodeWidthChar::width(ch).unwrap_or(0);
+        byte += ch.len_utf8();
+    }
+    col
 }

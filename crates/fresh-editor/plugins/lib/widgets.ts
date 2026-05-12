@@ -545,6 +545,118 @@ export class WidgetPanel {
 }
 
 // =============================================================================
+// FloatingWidgetPanel — mount-once-update-many wrapper for centered
+// floating overlays (no virtual buffer required).
+// =============================================================================
+
+/** A handle to a floating widget panel — a modal-ish overlay
+ * rendered in a centered frame on top of the editor, dimming the
+ * background. Unlike `WidgetPanel`, no virtual buffer is needed;
+ * the host owns the rect and paints the spec inside it.
+ *
+ * `mount({ widthPct, heightPct })` mounts the panel and renders
+ * the spec; `update(spec)` re-renders against the previous instance
+ * state; `unmount()` tears it down. The host routes keys to the
+ * focused widget automatically while a floating panel is up: Esc
+ * unmounts and fires a `widget_event` "cancel"; Tab / Enter /
+ * arrows / Backspace / printable chars route through the same
+ * smart-key dispatch as `WidgetPanel.command(key(...))`. */
+export class FloatingWidgetPanel {
+  private mounted = false;
+  private readonly panelId: number;
+
+  constructor(panelId?: number) {
+    this.panelId = panelId ?? allocatePanelId();
+  }
+
+  /** Returns the plugin-allocated panel id, useful for routing
+   * widget events back through `editor.on("widget_event", ...)`. */
+  id(): number {
+    return this.panelId;
+  }
+
+  /** Mount the panel as a centered overlay sized by `widthPct` /
+   * `heightPct` (percent of terminal, clamped 1..=100). Cheap to
+   * call repeatedly with a new spec — re-mounting replaces the
+   * existing panel. */
+  mount(
+    spec: WidgetSpec,
+    options: { widthPct?: number; heightPct?: number } = {},
+  ): boolean {
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    const wp = options.widthPct ?? 60;
+    const hp = options.heightPct ?? 40;
+    this.mounted = true;
+    return editor.mountFloatingWidget(this.panelId, spec, wp, hp);
+  }
+
+  /** Re-render the panel against the given spec; instance state on
+   * keyed widgets is preserved. No-op when not mounted. */
+  update(spec: WidgetSpec): boolean {
+    if (!this.mounted) return false;
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    return editor.updateFloatingWidget(this.panelId, spec);
+  }
+
+  /** Tear down the panel and let the editor return to its normal
+   * key/click routing. */
+  unmount(): boolean {
+    if (!this.mounted) return true;
+    this.mounted = false;
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    return editor.unmountFloatingWidget(this.panelId);
+  }
+
+  /** Route a key/nav action to the focused widget. The host
+   * automatically routes keystrokes while a floating panel is up,
+   * so plugins rarely need to call this directly — it's exposed
+   * for symmetry with `WidgetPanel`. */
+  command(action: WidgetAction): boolean {
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    return editor.widgetCommand(this.panelId, action);
+  }
+
+  /** Apply a targeted mutation in place — the IPC fast path. */
+  mutate(mutation: WidgetMutation): boolean {
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    return editor.widgetMutate(this.panelId, mutation);
+  }
+
+  setValue(widgetKey: string, value: string, cursorByte?: number): boolean {
+    return this.mutate({ kind: "setValue", widgetKey, value, cursorByte });
+  }
+
+  setChecked(widgetKey: string, checked: boolean): boolean {
+    return this.mutate({ kind: "setChecked", widgetKey, checked });
+  }
+
+  setSelectedIndex(widgetKey: string, index: number): boolean {
+    return this.mutate({ kind: "setSelectedIndex", widgetKey, index });
+  }
+
+  setItems(
+    widgetKey: string,
+    items: TextPropertyEntry[],
+    itemKeys: string[] = [],
+  ): boolean {
+    return this.mutate({ kind: "setItems", widgetKey, items, itemKeys });
+  }
+
+  setExpandedKeys(widgetKey: string, keys: string[]): boolean {
+    return this.mutate({ kind: "setExpandedKeys", widgetKey, keys });
+  }
+
+  setCheckedKeys(widgetKey: string, checked: boolean, keys: string[]): boolean {
+    return this.mutate({ kind: "setCheckedKeys", widgetKey, checked, keys });
+  }
+}
+
+// =============================================================================
 // WidgetAction builders — convenience wrappers around `panel.command(...)`.
 // Plugin's mode bindings call these for keys handled by the widget layer.
 // =============================================================================

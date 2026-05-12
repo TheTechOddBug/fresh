@@ -1388,6 +1388,15 @@ impl Editor {
         row: u16,
         modifiers: crossterm::event::KeyModifiers,
     ) -> AnyhowResult<()> {
+        // Floating widget panel is modal: clicks inside hit-test
+        // against its widget hits; clicks outside are swallowed so
+        // the user can't accidentally focus another split while the
+        // form is up. Auto-dismiss on outside-click is deliberately
+        // NOT done — the form has explicit Cancel / Esc.
+        if self.floating_widget_panel.is_some() {
+            self.handle_floating_widget_click(col, row);
+            return Ok(());
+        }
         if let Some(r) = self.handle_click_context_menus(col, row) {
             return r;
         }
@@ -3344,4 +3353,107 @@ impl Editor {
             Some(modified_files)
         }
     }
+
+    /// Hit-test a click against the floating widget panel. Clicks
+    /// inside the panel's inner rect resolve to a widget row/byte
+    /// and fire `widget_event` via the same path
+    /// `handle_editor_click` uses; clicks outside the rect are
+    /// swallowed without dismissing the panel.
+    fn handle_floating_widget_click(&mut self, col: u16, row: u16) {
+        let (panel_id, inner) = match self.floating_widget_panel.as_ref() {
+            Some(fwp) => match fwp.last_inner_rect {
+                Some(rect) => (fwp.panel_id, rect),
+                None => return,
+            },
+            None => return,
+        };
+        if col < inner.x || col >= inner.x + inner.width {
+            return;
+        }
+        if row < inner.y || row >= inner.y + inner.height {
+            return;
+        }
+        let brow = (row - inner.y) as u32;
+        let entries = self
+            .floating_widget_panel
+            .as_ref()
+            .map(|f| f.entries.clone())
+            .unwrap_or_default();
+        let local_screen_col = (col - inner.x) as usize;
+        let bcol = match entries.get(brow as usize) {
+            Some(entry) => screen_col_to_byte(&entry.text, local_screen_col),
+            None => return,
+        };
+        let (hit_payload, hit_event, hit_key, hit_kind) =
+            match self
+                .widget_registry
+                .hit_test(super::FLOATING_PANEL_BUFFER_ID, brow, bcol as u32)
+            {
+                Some((_, hit)) => (
+                    hit.payload.clone(),
+                    hit.event_type.to_string(),
+                    hit.widget_key.clone(),
+                    hit.widget_kind,
+                ),
+                None => return,
+            };
+        if !hit_key.is_empty() {
+            let tabbable = self
+                .widget_registry
+                .get(panel_id)
+                .map(|p| p.tabbable.iter().any(|k| k == &hit_key))
+                .unwrap_or(false);
+            if tabbable {
+                self.widget_registry
+                    .set_focus_key(panel_id, hit_key.clone());
+            }
+            self.rerender_widget_panel(panel_id);
+        }
+        let handled_specially = if hit_kind == "tree" && hit_event == "expand" {
+            if let Some(item_key) = hit_payload.get("key").and_then(|v| v.as_str()) {
+                self.handle_widget_tree_expand_toggle(panel_id, &hit_key, item_key);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if !handled_specially
+            && self
+                .plugin_manager
+                .read()
+                .unwrap()
+                .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
+                "widget_event",
+                crate::services::plugins::hooks::HookArgs::WidgetEvent {
+                    panel_id,
+                    widget_key: hit_key,
+                    event_type: hit_event,
+                    payload: hit_payload,
+                },
+            );
+        }
+    }
+}
+
+/// Translate a display-column offset within a rendered line into a
+/// UTF-8 byte offset inside the entry's text. Walks the string
+/// codepoint-by-codepoint using `unicode-width` so wide glyphs
+/// (CJK, emoji) advance by their actual screen width.
+fn screen_col_to_byte(text: &str, target_col: usize) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    let mut byte = 0;
+    let mut col = 0usize;
+    for ch in text.chars() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if col + w > target_col {
+            return byte;
+        }
+        col += w;
+        byte += ch.len_utf8();
+    }
+    byte
 }

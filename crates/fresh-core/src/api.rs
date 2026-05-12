@@ -3016,6 +3016,28 @@ pub enum PluginCommand {
         panel_id: u64,
         mutation: WidgetMutation,
     },
+
+    /// Mount a declarative widget panel as a centered floating
+    /// overlay rather than into a virtual buffer. `width_pct` and
+    /// `height_pct` size the overlay rect relative to the terminal
+    /// (clamped 1..=100). Only one floating widget panel may be
+    /// mounted at a time; a second `MountFloatingWidget` replaces
+    /// any existing one.
+    MountFloatingWidget {
+        panel_id: u64,
+        spec: WidgetSpec,
+        width_pct: u8,
+        height_pct: u8,
+    },
+
+    /// Replace the spec of the currently-mounted floating widget
+    /// panel. No-op when no floating panel is mounted, or when the
+    /// `panel_id` doesn't match the mounted one.
+    UpdateFloatingWidget { panel_id: u64, spec: WidgetSpec },
+
+    /// Tear down the floating widget panel. No-op when no floating
+    /// panel is mounted, or when the `panel_id` doesn't match.
+    UnmountFloatingWidget { panel_id: u64 },
 }
 
 impl PluginCommand {

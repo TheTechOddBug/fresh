@@ -1289,6 +1289,9 @@ mod tests {
             "unloadPlugin",
             "reloadPlugin",
             "listPlugins",
+            "mountFloatingWidget",
+            "updateFloatingWidget",
+            "unmountFloatingWidget",
         ];
 
         let mut missing = Vec::new();

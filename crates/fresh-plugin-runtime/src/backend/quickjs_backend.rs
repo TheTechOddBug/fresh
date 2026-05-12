@@ -4491,6 +4491,73 @@ impl JsEditorApi {
             .is_ok())
     }
 
+    /// Mount a declarative widget panel as a centered floating
+    /// overlay (not bound to any virtual buffer).
+    #[qjs(rename = "mountFloatingWidget")]
+    pub fn mount_floating_widget<'js>(
+        &self,
+        ctx: rquickjs::Ctx<'js>,
+        panel_id: f64,
+        spec_obj: rquickjs::Value<'js>,
+        width_pct: f64,
+        height_pct: f64,
+    ) -> rquickjs::Result<bool> {
+        let json = js_to_json(&ctx, spec_obj);
+        let spec: fresh_core::api::WidgetSpec = match serde_json::from_value(json) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("mountFloatingWidget: invalid spec: {}", e);
+                return Ok(false);
+            }
+        };
+        let width_pct = width_pct.clamp(1.0, 100.0) as u8;
+        let height_pct = height_pct.clamp(1.0, 100.0) as u8;
+        Ok(self
+            .command_sender
+            .send(PluginCommand::MountFloatingWidget {
+                panel_id: panel_id as u64,
+                spec,
+                width_pct,
+                height_pct,
+            })
+            .is_ok())
+    }
+
+    /// Replace the spec of the currently-mounted floating widget panel.
+    #[qjs(rename = "updateFloatingWidget")]
+    pub fn update_floating_widget<'js>(
+        &self,
+        ctx: rquickjs::Ctx<'js>,
+        panel_id: f64,
+        spec_obj: rquickjs::Value<'js>,
+    ) -> rquickjs::Result<bool> {
+        let json = js_to_json(&ctx, spec_obj);
+        let spec: fresh_core::api::WidgetSpec = match serde_json::from_value(json) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("updateFloatingWidget: invalid spec: {}", e);
+                return Ok(false);
+            }
+        };
+        Ok(self
+            .command_sender
+            .send(PluginCommand::UpdateFloatingWidget {
+                panel_id: panel_id as u64,
+                spec,
+            })
+            .is_ok())
+    }
+
+    /// Tear down the floating widget panel.
+    #[qjs(rename = "unmountFloatingWidget")]
+    pub fn unmount_floating_widget(&self, panel_id: f64) -> bool {
+        self.command_sender
+            .send(PluginCommand::UnmountFloatingWidget {
+                panel_id: panel_id as u64,
+            })
+            .is_ok()
+    }
+
     // === Async Operations ===
 
     /// Spawn a process (async, returns request_id)

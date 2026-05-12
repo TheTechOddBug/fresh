@@ -22,7 +22,7 @@ use crate::services::async_bridge::AsyncMessage;
 use crate::view::split::SplitViewState;
 
 use super::window::Window;
-use super::Editor;
+use super::{Editor, FloatingWidgetState, FLOATING_PANEL_BUFFER_ID};
 
 /// Snapshot of the focused `Text` widget's host-owned state.
 /// Returned by `read_focused_text` and consumed by
@@ -1298,6 +1298,23 @@ impl Editor {
 
             PluginCommand::WidgetMutate { panel_id, mutation } => {
                 self.handle_widget_mutate(panel_id, mutation);
+            }
+
+            PluginCommand::MountFloatingWidget {
+                panel_id,
+                spec,
+                width_pct,
+                height_pct,
+            } => {
+                self.handle_mount_floating_widget(panel_id, spec, width_pct, height_pct);
+            }
+
+            PluginCommand::UpdateFloatingWidget { panel_id, spec } => {
+                self.handle_update_floating_widget(panel_id, spec);
+            }
+
+            PluginCommand::UnmountFloatingWidget { panel_id } => {
+                self.handle_unmount_floating_widget(panel_id);
             }
         }
         Ok(())
@@ -3529,13 +3546,15 @@ impl Editor {
             .focus_key(panel_id)
             .map(|s| s.to_string())
             .unwrap_or_default();
-        let panel_width = self.widget_panel_width(buffer_id);
+        let is_floating = buffer_id == FLOATING_PANEL_BUFFER_ID;
+        let panel_width = if is_floating {
+            self.floating_panel_inner_width()
+        } else {
+            self.widget_panel_width(buffer_id)
+        };
         let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
         let focus_cursor = out.focus_cursor;
         let entries = out.entries;
-        // The panel exists (we read it just above) — `update`'s
-        // Err arm only fires for unknown panels, so an error here
-        // would mean the registry was mutated mid-call.
         if self
             .widget_registry
             .update(
@@ -3549,6 +3568,15 @@ impl Editor {
             .is_err()
         {
             tracing::warn!("rerender_widget_panel({}) lost panel mid-call", panel_id);
+            return;
+        }
+        if is_floating {
+            if let Some(fwp) = self.floating_widget_panel.as_mut() {
+                if fwp.panel_id == panel_id {
+                    fwp.entries = entries;
+                    fwp.focus_cursor = focus_cursor;
+                }
+            }
             return;
         }
         if let Err(e) = self.set_virtual_buffer_content(buffer_id, entries.clone()) {
@@ -3703,7 +3731,11 @@ impl Editor {
         self.rerender_widget_panel(panel_id);
     }
 
-    fn handle_widget_command(&mut self, panel_id: u64, action: fresh_core::api::WidgetAction) {
+    pub(super) fn handle_widget_command(
+        &mut self,
+        panel_id: u64,
+        action: fresh_core::api::WidgetAction,
+    ) {
         use fresh_core::api::WidgetAction;
         match action {
             WidgetAction::FocusAdvance { delta } => {
@@ -4748,6 +4780,136 @@ impl Editor {
                 tracing::debug!("UnmountWidgetPanel for unknown panel {} ignored", panel_id);
             }
         }
+    }
+
+    fn handle_mount_floating_widget(
+        &mut self,
+        panel_id: u64,
+        spec: fresh_core::api::WidgetSpec,
+        width_pct: u8,
+        height_pct: u8,
+    ) {
+        let width_pct = width_pct.clamp(1, 100);
+        let height_pct = height_pct.clamp(1, 100);
+        if let Some(existing) = self.floating_widget_panel.take() {
+            if existing.panel_id != panel_id {
+                let _ = self.widget_registry.unmount(existing.panel_id);
+            }
+        }
+        self.floating_widget_panel = Some(FloatingWidgetState {
+            panel_id,
+            width_pct,
+            height_pct,
+            entries: Vec::new(),
+            focus_cursor: None,
+            last_inner_rect: None,
+        });
+        let prev = std::collections::HashMap::new();
+        let prev_focus = String::new();
+        let panel_width = self.floating_panel_inner_width();
+        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
+        let focus_cursor = out.focus_cursor;
+        let entries = out.entries;
+        self.widget_registry.mount(
+            panel_id,
+            FLOATING_PANEL_BUFFER_ID,
+            spec,
+            out.hits,
+            out.instance_states,
+            out.focus_key,
+            out.tabbable,
+        );
+        if let Some(fwp) = self.floating_widget_panel.as_mut() {
+            fwp.entries = entries;
+            fwp.focus_cursor = focus_cursor;
+        }
+        tracing::debug!(
+            "Mounted floating widget panel {} ({}%x{}%)",
+            panel_id,
+            width_pct,
+            height_pct
+        );
+    }
+
+    fn handle_update_floating_widget(&mut self, panel_id: u64, spec: fresh_core::api::WidgetSpec) {
+        match self.floating_widget_panel.as_ref() {
+            Some(fwp) if fwp.panel_id == panel_id => {}
+            _ => {
+                tracing::debug!(
+                    "UpdateFloatingWidget for unknown / mismatched panel {} ignored",
+                    panel_id
+                );
+                return;
+            }
+        }
+        let prev = self
+            .widget_registry
+            .instance_states(panel_id)
+            .cloned()
+            .unwrap_or_default();
+        let prev_focus = self
+            .widget_registry
+            .focus_key(panel_id)
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let panel_width = self.floating_panel_inner_width();
+        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
+        let focus_cursor = out.focus_cursor;
+        let entries = out.entries;
+        if self
+            .widget_registry
+            .update(
+                panel_id,
+                spec,
+                out.hits,
+                out.instance_states,
+                out.focus_key,
+                out.tabbable,
+            )
+            .is_err()
+        {
+            tracing::debug!(
+                "UpdateFloatingWidget for unknown panel {} ignored (not in registry)",
+                panel_id
+            );
+            return;
+        }
+        if let Some(fwp) = self.floating_widget_panel.as_mut() {
+            fwp.entries = entries;
+            fwp.focus_cursor = focus_cursor;
+        }
+    }
+
+    fn handle_unmount_floating_widget(&mut self, panel_id: u64) {
+        match self.floating_widget_panel.as_ref() {
+            Some(fwp) if fwp.panel_id == panel_id => {}
+            _ => {
+                tracing::debug!(
+                    "UnmountFloatingWidget for unknown / mismatched panel {} ignored",
+                    panel_id
+                );
+                return;
+            }
+        }
+        self.floating_widget_panel = None;
+        let _ = self.widget_registry.unmount(panel_id);
+        tracing::debug!("Unmounted floating widget panel {}", panel_id);
+    }
+
+    /// Inner-rect column budget for a floating panel render — the
+    /// terminal width × `width_pct`, minus 2 cols for the frame
+    /// border. Mirrors the `widget_panel_width` reservation; never
+    /// goes below 10 cols so flex spacers don't collapse to zero on
+    /// narrow terminals.
+    pub(super) fn floating_panel_inner_width(&self) -> u32 {
+        let term_w = self.terminal_width.max(1) as u32;
+        let pct = self
+            .floating_widget_panel
+            .as_ref()
+            .map(|f| f.width_pct.clamp(1, 100) as u32)
+            .unwrap_or(80);
+        let w = (term_w * pct) / 100;
+        w.saturating_sub(2).max(10)
     }
 
     fn handle_get_text_properties_at_cursor(&self, buffer_id: BufferId) {

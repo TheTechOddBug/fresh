@@ -494,6 +494,18 @@ impl Editor {
             return Ok(());
         }
 
+        // Floating widget panel claims all keys while visible. Esc
+        // unmounts + fires a `widget_event` "cancel"; smart-key names
+        // (Tab/Return/Backspace/…/Up/Down) route through the widget
+        // command dispatcher; printable chars feed `textInputChar` to
+        // the focused TextInput. Mouse clicks outside the panel are
+        // swallowed (handled in `mouse_input`).
+        if self.floating_widget_panel.is_some()
+            && self.dispatch_floating_widget_key(code, modifiers)
+        {
+            return Ok(());
+        }
+
         // Clear skip_ensure_visible flag so cursor becomes visible after key press
         // (scroll actions will set it again if needed). Use the *effective*
         // active split so this clears the flag on a focused buffer-group
@@ -2551,5 +2563,100 @@ impl Editor {
         }
 
         Ok(())
+    }
+
+    /// Route a keystroke to the floating widget panel when one is
+    /// mounted. Returns `true` if the key was consumed.
+    ///
+    /// Esc unmounts the panel and fires a `widget_event` `cancel`
+    /// so the plugin can clean up its own state (clear mode, drop
+    /// form state, etc.). Tab / S-Tab / Return / Space / Backspace /
+    /// Delete / Home / End / Left / Right / Up / Down route through
+    /// the same smart-key dispatch the bound mode handlers would
+    /// use. Printable characters feed `textInputChar` to the
+    /// currently focused TextInput.
+    fn dispatch_floating_widget_key(
+        &mut self,
+        code: crossterm::event::KeyCode,
+        modifiers: crossterm::event::KeyModifiers,
+    ) -> bool {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        let panel_id = match self.floating_widget_panel.as_ref() {
+            Some(fwp) => fwp.panel_id,
+            None => return false,
+        };
+        let key_name: Option<&str> = match code {
+            KeyCode::Esc => {
+                let widget_key = self
+                    .widget_registry
+                    .get(panel_id)
+                    .map(|p| p.focus_key.clone())
+                    .unwrap_or_default();
+                if self
+                    .plugin_manager
+                    .read()
+                    .unwrap()
+                    .has_hook_handlers("widget_event")
+                {
+                    self.plugin_manager.read().unwrap().run_hook(
+                        "widget_event",
+                        crate::services::plugins::hooks::HookArgs::WidgetEvent {
+                            panel_id,
+                            widget_key,
+                            event_type: "cancel".to_string(),
+                            payload: serde_json::json!({}),
+                        },
+                    );
+                }
+                self.floating_widget_panel = None;
+                let _ = self.widget_registry.unmount(panel_id);
+                return true;
+            }
+            KeyCode::Tab => Some(if modifiers.contains(KeyModifiers::SHIFT) {
+                "Shift+Tab"
+            } else {
+                "Tab"
+            }),
+            KeyCode::BackTab => Some("Shift+Tab"),
+            KeyCode::Enter => Some("Enter"),
+            KeyCode::Backspace => Some("Backspace"),
+            KeyCode::Delete => Some("Delete"),
+            KeyCode::Home => Some("Home"),
+            KeyCode::End => Some("End"),
+            KeyCode::Left => Some("Left"),
+            KeyCode::Right => Some("Right"),
+            KeyCode::Up => Some("Up"),
+            KeyCode::Down => Some("Down"),
+            KeyCode::PageUp => Some("PageUp"),
+            KeyCode::PageDown => Some("PageDown"),
+            _ => None,
+        };
+        if let Some(name) = key_name {
+            self.handle_widget_command(
+                panel_id,
+                fresh_core::api::WidgetAction::Key {
+                    key: name.to_string(),
+                },
+            );
+            return true;
+        }
+        if let KeyCode::Char(c) = code {
+            if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) {
+                return false;
+            }
+            let ch = if modifiers.contains(KeyModifiers::SHIFT) {
+                c.to_uppercase().next().unwrap_or(c)
+            } else {
+                c
+            };
+            self.handle_widget_command(
+                panel_id,
+                fresh_core::api::WidgetAction::TextInputChar {
+                    text: ch.to_string(),
+                },
+            );
+            return true;
+        }
+        false
     }
 }

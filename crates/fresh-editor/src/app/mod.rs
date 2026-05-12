@@ -894,6 +894,43 @@ pub struct Editor {
     /// the originating plugin needing to re-emit. See
     /// `docs/internal/plugin-widget-library-design.md`.
     pub(crate) widget_registry: crate::widgets::WidgetRegistry,
+
+    /// Currently-mounted floating widget panel, if any.
+    ///
+    /// At most one floating widget panel is shown at a time — the
+    /// overlay is modal-ish (input is routed to it) and stacking
+    /// floaters would obscure each other without a usable focus
+    /// model. Mounting a second one replaces the first.
+    pub(crate) floating_widget_panel: Option<FloatingWidgetState>,
+}
+
+/// Sentinel `BufferId` registered with the widget registry for the
+/// floating panel — never appears in the editor's buffer table, so
+/// `set_virtual_buffer_content` against it would fail. The mount /
+/// rerender paths special-case this id and paint into the overlay
+/// rect instead.
+pub(crate) const FLOATING_PANEL_BUFFER_ID: BufferId = BufferId(usize::MAX);
+
+/// A widget panel rendered as a centered floating overlay rather
+/// than into a virtual buffer. The panel still lives in the shared
+/// `widget_registry` (so the existing reconcile / widget-command /
+/// mutate paths apply), but its rendered entries are painted into
+/// the overlay rect at draw time instead of being written into a
+/// virtual buffer.
+#[derive(Debug, Clone)]
+pub(crate) struct FloatingWidgetState {
+    pub panel_id: crate::widgets::PanelId,
+    pub width_pct: u8,
+    pub height_pct: u8,
+    /// Most-recently rendered entries. Refreshed on every spec /
+    /// command / mutate; painted into the overlay rect at draw
+    /// time.
+    pub entries: Vec<fresh_core::text_property::TextPropertyEntry>,
+    /// Hardware-cursor target when a `TextInput` is focused.
+    pub focus_cursor: Option<crate::widgets::FocusCursor>,
+    /// Inner rect (frame interior) of the last draw — used by the
+    /// click hit-test to map terminal coords back to buffer coords.
+    pub last_inner_rect: Option<ratatui::layout::Rect>,
 }
 
 /// A file that should be opened after the TUI starts
