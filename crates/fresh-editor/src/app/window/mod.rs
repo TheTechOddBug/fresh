@@ -1681,17 +1681,34 @@ impl Window {
         // `vs.active_buffer` without touching `vs.open_buffers`, so
         // `clean_orphaned_buffers` (which filters by `buffer_tab_ids`)
         // can remove a buffer the split manager still points at.
-        // When that happens, fall back to any live buffer. The split
-        // manager pointer is stale until something repairs it, but
-        // render no longer crashes at the status-bar `.unwrap()`.
+        // When that happens, fall back to any live buffer and warn
+        // loudly — the split manager pointer is stale until something
+        // repairs it, and we want the underlying state corruption
+        // visible in logs even though render itself no longer crashes.
         if self.buffers.get(&outer_buf).is_some() {
             (active_split, outer_buf)
         } else if let Some(any) = self.buffers.find_id(|_, _| true) {
+            tracing::warn!(
+                stale_buffer_id = ?outer_buf,
+                fallback_buffer_id = ?any,
+                active_split = ?active_split,
+                "effective_active_pair: split manager's active leaf points at \
+                 a BufferId missing from window.buffers (issue #1939). Falling \
+                 back to any live buffer; the split tree is in an inconsistent \
+                 state and should be repaired"
+            );
             (active_split, any)
         } else {
             // `self.buffers` empty: a bigger invariant violation than
             // this helper can recover from. Preserve old behaviour so
             // the panic surfaces at the next `.unwrap()` site.
+            tracing::error!(
+                stale_buffer_id = ?outer_buf,
+                active_split = ?active_split,
+                "effective_active_pair: window.buffers is empty AND the split \
+                 manager has a stale active buffer — no recovery possible, \
+                 next render will panic"
+            );
             (active_split, outer_buf)
         }
     }
