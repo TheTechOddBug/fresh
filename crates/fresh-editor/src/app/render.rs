@@ -1924,7 +1924,7 @@ impl Editor {
         let preview_buffers: Vec<fresh_core::BufferId> = self
             .windows
             .get(&sid)
-            .map(|s| s.buffers.keys().copied().collect())
+            .map(|s| s.buffers.ids())
             .unwrap_or_default();
         for bid in preview_buffers {
             let Some(&terminal_id) = self.active_window().terminal_buffers.get(&bid) else {
@@ -2199,7 +2199,7 @@ impl Editor {
                     .windows
                     .get_mut(&__active_id)
                     .expect("active window must exist");
-                let __buffer_keys: Vec<BufferId> = __win.buffers.keys().copied().collect();
+                let __buffer_keys: Vec<BufferId> = __win.buffers.ids();
                 let (__mgr, __vs_map) = __win
                     .splits
                     .as_mut()

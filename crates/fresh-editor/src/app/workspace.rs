@@ -1275,18 +1275,13 @@ impl Editor {
             .get(&self.active_window)
             .map(|w| &w.buffers)
             .expect("active window present")
-            .keys()
-            .copied()
-            .filter(|id| {
+            .iter()
+            .filter(|(id, state)| {
                 !referenced.contains(id)
-                    && self
-                        .windows
-                        .get(&self.active_window)
-                        .map(|w| &w.buffers)
-                        .expect("active window present")
-                        .get(id)
-                        .is_some_and(|s| s.buffer.file_path().is_none() && !s.buffer.is_modified())
+                    && state.buffer.file_path().is_none()
+                    && !state.buffer.is_modified()
             })
+            .map(|(id, _)| *id)
             .collect();
         for id in orphans {
             tracing::debug!("Removing orphaned empty unnamed buffer {:?}", id);
@@ -1318,16 +1313,12 @@ impl Editor {
                 .expect("active window present")
                 .len()
         );
-        let restored_count = self
-            .buffers()
-            .keys()
-            .filter(|id| {
-                self.active_window()
-                    .buffer_metadata
-                    .get(id)
-                    .is_some_and(|m| !m.hidden_from_tabs && !m.is_virtual())
-            })
-            .count();
+        let restored_count = self.buffers().count_where(|id, _| {
+            self.active_window()
+                .buffer_metadata
+                .get(&id)
+                .is_some_and(|m| !m.hidden_from_tabs && !m.is_virtual())
+        });
         if restored_count == 0 {
             return;
         }

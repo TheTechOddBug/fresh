@@ -213,12 +213,11 @@ impl Editor {
 
         // Propagate tab_size/use_tabs/auto_close/whitespace visibility to all open buffers
         // Each buffer resolves its settings from its language + the new global config
-        for state in self
+        for (_, state) in self
             .windows
             .get_mut(&self.active_window)
             .map(|w| &mut w.buffers)
             .expect("active window present")
-            .values_mut()
         {
             let mut whitespace =
                 crate::config::WhitespaceVisibility::from_editor_config(&self.config.editor);

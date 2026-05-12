@@ -1088,13 +1088,8 @@ impl Editor {
                     .and_then(|lsp| lsp.server_scope(&server_name_ref).cloned());
                 match scope {
                     Some(scope) if scope.is_universal() => {
-                        let languages: Vec<String> = self
-                            .buffers()
-                            .values()
-                            .map(|s| s.language.clone())
-                            .collect::<std::collections::HashSet<_>>()
-                            .into_iter()
-                            .collect();
+                        let languages: Vec<String> =
+                            self.buffers().languages().into_iter().collect();
                         for lang in languages {
                             self.reopen_buffers_for_language(&lang);
                         }

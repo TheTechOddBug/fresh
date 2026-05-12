@@ -761,7 +761,7 @@ impl TabsRenderer {
         theme: &crate::view::theme::Theme,
     ) {
         // Sort buffer IDs to ensure consistent tab order
-        let mut buffer_ids: Vec<_> = buffers.keys().copied().collect();
+        let mut buffer_ids: Vec<_> = buffers.ids();
         buffer_ids.sort_by_key(|id| id.0);
         let tab_targets: Vec<TabTarget> = buffer_ids.into_iter().map(TabTarget::Buffer).collect();
         let group_names = HashMap::new();

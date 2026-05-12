@@ -945,7 +945,7 @@ impl Editor {
         }
 
         let _ = active_split;
-        if !self.active_window().buffers.contains_key(&buffer_id) {
+        if self.active_window().buffers.get(&buffer_id).is_none() {
             tracing::warn!("Buffer {:?} not found for SetBufferCursor", buffer_id);
             return;
         }

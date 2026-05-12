@@ -241,12 +241,11 @@ impl Editor {
             self.set_status_message(t!("toggle.inlay_hints_enabled").to_string());
         } else {
             // Clear inlay hints from all buffers
-            for state in self
+            for (_, state) in self
                 .windows
                 .get_mut(&self.active_window)
                 .map(|w| &mut w.buffers)
                 .expect("active window present")
-                .values_mut()
             {
                 state.virtual_texts.clear(&mut state.marker_list);
             }

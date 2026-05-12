@@ -589,11 +589,7 @@ impl Editor {
         self.active_window_mut().last_auto_revert_poll = self.time_source.now();
 
         // Collect paths of open files that need checking
-        let files_to_check: Vec<PathBuf> = self
-            .buffers()
-            .values()
-            .filter_map(|state| state.buffer.file_path().map(PathBuf::from))
-            .collect();
+        let files_to_check: Vec<PathBuf> = self.buffers().paths();
 
         if files_to_check.is_empty() {
             return any_changed;

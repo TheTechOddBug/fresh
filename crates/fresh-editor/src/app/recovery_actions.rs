@@ -55,7 +55,6 @@ impl Editor {
                 .get_mut(&self.active_window)
                 .map(|w| &mut w.buffers)
                 .expect("active window present")
-                .iter_mut()
             {
                 if state.buffer.is_modified() {
                     state.buffer.set_recovery_pending(true);

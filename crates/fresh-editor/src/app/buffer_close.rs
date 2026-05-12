@@ -158,19 +158,15 @@ impl Editor {
 
         // Any visible buffer other than the one being closed. Used as the
         // general fallback (no LRU target or LRU points at a gone group).
-        let fallback_buffer: Option<BufferId> = self
-            .buffers()
-            .keys()
-            .find(|&&bid| {
-                bid != id
-                    && !self
-                        .active_window()
-                        .buffer_metadata
-                        .get(&bid)
-                        .map(|m| m.hidden_from_tabs)
-                        .unwrap_or(false)
-            })
-            .copied();
+        let fallback_buffer: Option<BufferId> = self.buffers().find_id(|bid, _| {
+            bid != id
+                && !self
+                    .active_window()
+                    .buffer_metadata
+                    .get(&bid)
+                    .map(|m| m.hidden_from_tabs)
+                    .unwrap_or(false)
+        });
 
         // Capture before the replacement computation — new_buffer() has the
         // side effect of calling set_active_buffer which changes active_buffer().
@@ -220,9 +216,7 @@ impl Editor {
                 .get(&self.active_window)
                 .map(|w| &w.buffers)
                 .expect("active window present")
-                .keys()
-                .copied()
-                .find(|&bid| bid != id)
+                .find_id(|bid, _| bid != id)
         });
 
         let (replacement_buffer, created_empty_buffer) = match direct_replacement

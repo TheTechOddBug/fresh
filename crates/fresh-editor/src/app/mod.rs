@@ -973,9 +973,7 @@ impl Editor {
             .get(&self.active_window)
             .map(|w| &w.buffers)
             .expect("active window present")
-            .keys()
-            .copied()
-            .collect();
+            .ids();
         ids.sort_by_key(|id| id.0);
         ids
     }

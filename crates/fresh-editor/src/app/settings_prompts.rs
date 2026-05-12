@@ -481,9 +481,7 @@ impl Editor {
             .get(&self.active_window)
             .map(|w| &w.buffers)
             .expect("active window present")
-            .keys()
-            .cloned()
-            .collect();
+            .ids();
         for buffer_id in buffer_ids {
             let tokens = self
                 .buffers()

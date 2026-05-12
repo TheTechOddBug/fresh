@@ -1740,7 +1740,7 @@ impl Window {
                 if let Some(inner_leaf) = vs.focused_group_leaf {
                     if let Some(inner_vs) = vs_map.get(&inner_leaf) {
                         let inner_buf = inner_vs.active_buffer;
-                        if self.buffers.contains_key(&inner_buf)
+                        if self.buffers.get(&inner_buf).is_some()
                             && inner_vs.keyed_states.contains_key(&inner_buf)
                         {
                             return (inner_leaf, inner_buf);
@@ -1763,9 +1763,9 @@ impl Window {
         // When that happens, fall back to any live buffer. The split
         // manager pointer is stale until something repairs it, but
         // render no longer crashes at the status-bar `.unwrap()`.
-        if self.buffers.contains_key(&outer_buf) {
+        if self.buffers.get(&outer_buf).is_some() {
             (active_split, outer_buf)
-        } else if let Some(&any) = self.buffers.keys().next() {
+        } else if let Some(any) = self.buffers.find_id(|_, _| true) {
             (active_split, any)
         } else {
             // `self.buffers` empty: a bigger invariant violation than
@@ -2513,14 +2513,7 @@ impl Window {
     /// the debounce period has elapsed and semantic highlights need to
     /// be recomputed.
     pub fn check_semantic_highlight_timer(&self) -> bool {
-        for state in self.buffers.values() {
-            if let Some(remaining) = state.reference_highlight_overlay.needs_redraw() {
-                if remaining.is_zero() {
-                    return true;
-                }
-            }
-        }
-        false
+        self.buffers.any_needs_semantic_redraw()
     }
 
     /// If an active search has placed the cursor inside a match, return that
