@@ -273,7 +273,6 @@ fn test_search_replace_escape_closes_panel() {
     );
 }
 
-/// Typing a pattern but not yet running a search must NOT show
 /// "No matches found" — the placeholder is a lie if the search
 /// hasn't actually completed. See §17 of
 /// `docs/internal/search-replace-scope-replan-on-widgets.md`.

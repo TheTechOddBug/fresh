@@ -117,6 +117,38 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 let searchDebounceGeneration = 0;
 
+/** Most-recent-first history of search patterns, capped at HISTORY_MAX.
+ *  Up arrow in the search field walks back into older entries; Down
+ *  walks forward. Persistence across editor restarts is a follow-up.
+ *  See §11 of docs/internal/search-replace-scope-replan-on-widgets.md. */
+const searchHistory: string[] = [];
+const HISTORY_MAX = 20;
+/** -1 = not navigating history. 0..searchHistory.length-1 = currently
+ *  displaying the history entry at that index. */
+let historyIndex = -1;
+/** Whatever the user had in the search field before they pressed Up
+ *  to enter history-walk mode. Restored when they Down past the most
+ *  recent history entry. */
+let historySavedPattern: string | null = null;
+/** Most recent widget_event we saw a widget_key for. Used to decide
+ *  whether Up/Down should walk history (when focus appears to be on
+ *  the search field) or fall through to the widget runtime. The
+ *  widget runtime doesn't expose focus directly to the plugin, but
+ *  every event that's relevant (change/select/toggle/activate/expand)
+ *  carries widget_key. Best-effort proxy. */
+let lastFocusedWidget: string | null = null;
+
+function historyPush(pattern: string): void {
+  if (!pattern) return;
+  const existing = searchHistory.indexOf(pattern);
+  if (existing === 0) return;
+  if (existing > 0) searchHistory.splice(existing, 1);
+  searchHistory.unshift(pattern);
+  if (searchHistory.length > HISTORY_MAX) {
+    searchHistory.length = HISTORY_MAX;
+  }
+}
+
 // =============================================================================
 // Colors
 // =============================================================================
@@ -1121,6 +1153,12 @@ async function rerunSearch(): Promise<void> {
   // search completes and flip busy=true behind the user's back (would
   // race with the next Alt+Ret). See §3 / §17.
   searchDebounceGeneration++;
+  // Record the pattern in history — unless we're currently walking
+  // history (the active entry is already there at index historyIndex
+  // and pushing would shuffle indices). See §11.
+  if (historyIndex < 0) {
+    historyPush(panel.searchPattern);
+  }
   panel.truncated = false;
   panel.busy = true;
   panel.matchIndex = 0;
@@ -1184,8 +1222,63 @@ registerHandler("search_replace_home",      () => dispatch(widgetKey("Home")));
 registerHandler("search_replace_end",       () => dispatch(widgetKey("End")));
 registerHandler("search_replace_nav_left",  () => dispatch(widgetKey("Left")));
 registerHandler("search_replace_nav_right", () => dispatch(widgetKey("Right")));
-registerHandler("search_replace_nav_up",    () => dispatch(widgetKey("Up")));
-registerHandler("search_replace_nav_down",  () => dispatch(widgetKey("Down")));
+/** Apply a stored history entry to the search field. Mutates the
+ *  widget's value via setValue so the host instance state stays in
+ *  sync with the plugin's panel.searchPattern, and triggers a
+ *  debounced re-search. See §11. */
+function applyHistoryEntry(text: string): void {
+  if (!panel || !panel.widgetPanel) return;
+  panel.searchPattern = text;
+  panel.cursorPos = text.length;
+  panel.searchPerformed = false;
+  panel.widgetPanel.setValue("searchField", text, byteLen(text));
+  rerunSearchDebounced();
+}
+
+/** Whether Up/Down should be intercepted for history walk (instead of
+ *  being passed to the focused widget). True only when the most recent
+ *  widget_event indicated focus was on the search field. */
+function shouldInterceptForHistory(): boolean {
+  return lastFocusedWidget === "searchField" || lastFocusedWidget === null;
+}
+
+registerHandler("search_replace_nav_up", () => {
+  if (!panel) return;
+  if (shouldInterceptForHistory()) {
+    if (searchHistory.length === 0) return;
+    if (historyIndex < 0) {
+      // Entering history walk — snapshot what the user had typed so
+      // a Down past the most recent entry restores it.
+      historySavedPattern = panel.searchPattern;
+      historyIndex = 0;
+    } else if (historyIndex < searchHistory.length - 1) {
+      historyIndex += 1;
+    } else {
+      return; // already at the oldest entry
+    }
+    applyHistoryEntry(searchHistory[historyIndex]);
+    return;
+  }
+  dispatch(widgetKey("Up"));
+});
+registerHandler("search_replace_nav_down", () => {
+  if (!panel) return;
+  if (shouldInterceptForHistory() && historyIndex >= 0) {
+    if (historyIndex > 0) {
+      historyIndex -= 1;
+      applyHistoryEntry(searchHistory[historyIndex]);
+      return;
+    }
+    // Down past the most recent entry → exit history walk and restore
+    // whatever the user had typed before they hit Up.
+    historyIndex = -1;
+    const restore = historySavedPattern ?? "";
+    historySavedPattern = null;
+    applyHistoryEntry(restore);
+    return;
+  }
+  dispatch(widgetKey("Down"));
+});
 registerHandler("search_replace_nav_page_up",   () => dispatch(widgetKey("PageUp")));
 registerHandler("search_replace_nav_page_down", () => dispatch(widgetKey("PageDown")));
 
@@ -1415,6 +1508,15 @@ editor.on("buffer_closed", (args) => {
 editor.on("widget_event", (args) => {
   if (!panel || args.panel_id !== panel.widgetPanel?.id()) return;
 
+  // Track most-recent focused widget so Up/Down can decide whether to
+  // walk search history (search field) or pass through to the widget
+  // runtime (matches tree, toggles, button). The widget runtime
+  // doesn't expose focus to the plugin directly; this best-effort
+  // proxy is good enough for the history-walk gesture. See §11.
+  if (typeof args.widget_key === "string" && args.widget_key.length > 0) {
+    lastFocusedWidget = args.widget_key;
+  }
+
   // `change` — fired for TextInput edits (Backspace, Delete,
   // arrows, Home/End, mode_text_input). Payload carries the new
   // value and cursor byte offset. The host already updated the
@@ -1436,6 +1538,11 @@ editor.on("widget_event", (args) => {
         // Pattern mutated by the user; cached "no matches" / result
         // set no longer reflects this query. See §17.
         panel.searchPerformed = false;
+        // User-driven typing exits any in-flight history walk so a
+        // subsequent Up doesn't snap back to a history entry under
+        // the cursor. See §11.
+        historyIndex = -1;
+        historySavedPattern = null;
         // We're rendering more than just the typing-fast-path because
         // the matches-list empty-state branch now depends on the
         // (searchPattern, searchPerformed, busy, totalMatches) tuple.
