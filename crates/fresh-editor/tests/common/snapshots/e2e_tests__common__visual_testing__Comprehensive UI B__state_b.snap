@@ -23,7 +23,7 @@ expression: "&screen_text"
 │  Plugin Demo: Open Help                             Open the editor help page (uses built-in action)          welcome│
 │  Show Signature Help                                Show function parameter hints                             builtin│
 │  Shell Command (Replace)              Alt+Shift+|   Run shell command on buffer/selection, replac...          builtin│
-│  Search and Replace in Project                      Search and replace text across all git-tracke...   search_replace│
+│  Search and Replace in Project        Alt+A         Search and replace text across all git-tracke...   search_replace│
 │  Show Manual                          F1            Open the help manual                                      builtin│
 │  Git Log: Close                                     Close the git log panel                                   git_log│
 │  Toggle Inlay Hints                                 Show or hide LSP inlay hints (type hints, par...          builtin│

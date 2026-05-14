@@ -3253,21 +3253,35 @@ mod tests {
     /// Validate that every action name in every built-in keymap resolves to a
     /// known built-in action, not a `PluginAction`.  This catches typos like
     /// `"prompt_delete_to_end"` (should be `"prompt_delete_to_line_end"`).
+    ///
+    /// A built-in keymap may also legitimately bind to a plugin action when
+    /// the plugin ships with the editor and the host has no native equivalent
+    /// (e.g. Alt+A → search/replace, see §10 of
+    /// docs/internal/search-replace-scope-replan-on-widgets.md). Such actions
+    /// are listed in `ALLOWED_PLUGIN_ACTIONS_IN_DEFAULTS` below; any new
+    /// addition must be added there explicitly so genuine typos still fail.
     #[test]
     fn test_all_builtin_keymaps_have_valid_action_names() {
         let known_actions: std::collections::HashSet<String> =
             Action::all_action_names().into_iter().collect();
+
+        const ALLOWED_PLUGIN_ACTIONS_IN_DEFAULTS: &[&str] = &["start_search_replace"];
 
         let config = Config::default();
 
         for map_name in crate::config::KeybindingMapName::BUILTIN_OPTIONS {
             let bindings = config.resolve_keymap(map_name);
             for binding in &bindings {
+                let is_known_builtin = known_actions.contains(&binding.action);
+                let is_allowed_plugin =
+                    ALLOWED_PLUGIN_ACTIONS_IN_DEFAULTS.contains(&binding.action.as_str());
                 assert!(
-                    known_actions.contains(&binding.action),
+                    is_known_builtin || is_allowed_plugin,
                     "Keymap '{}' contains unknown action '{}' (key: '{}', when: {:?}). \
                      This will be treated as a plugin action at runtime. \
-                     Check for typos in the keymap JSON file.",
+                     Check for typos in the keymap JSON file, or add the action to \
+                     ALLOWED_PLUGIN_ACTIONS_IN_DEFAULTS if it's an intentional \
+                     plugin-action binding.",
                     map_name,
                     binding.action,
                     binding.key,

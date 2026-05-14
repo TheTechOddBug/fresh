@@ -40,58 +40,42 @@ fn create_test_files(project_root: &std::path::Path) {
     .unwrap();
 }
 
-/// Open command palette, find "Search and Replace in Project", execute it.
-/// Types the full project-scoped command name so the new "in Current File"
-/// variant (§1) doesn't get picked instead — both commands share the
-/// "Search and Replace" prefix and the palette would land on the first
-/// match if we only typed the prefix.
+/// Open the project-wide Search & Replace panel. Uses the Alt+A
+/// keybinding (§10) rather than the command palette, because the
+/// palette now offers two near-identical entries ("Search and Replace
+/// in Project" vs "Search and Replace in Current File") and any prefix
+/// filter that matches one matches both — Enter selects whichever the
+/// palette highlights first, which is non-deterministic.
 fn open_search_replace_via_palette(harness: &mut EditorTestHarness) {
     harness
-        .send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
+        .send_key(KeyCode::Char('a'), KeyModifiers::ALT)
         .unwrap();
-    harness.wait_for_prompt().unwrap();
-
-    harness.type_text("Search and Replace in Project").unwrap();
-
     harness
-        .wait_until(|h| {
-            h.screen_to_string()
-                .contains("Search and Replace in Project")
-        })
+        .wait_until(|h| h.screen_to_string().contains("Search:"))
         .unwrap();
-
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::NONE)
-        .unwrap();
-    harness.render().unwrap();
 }
 
-/// Complete the inline edit flow: panel opens → type search → Enter → type replace → Enter → search runs.
-/// In the new UX, characters are typed directly into the panel fields (no prompts).
+/// Complete the inline edit flow: panel opens → type search → Tab to
+/// replace field → type replace. Search runs continuously via the
+/// debounced typing path; no explicit "submit" needed.
+///
+/// Important: do NOT press Enter in the search field. The widget
+/// runtime treats Enter on a single-line Text widget as "picker-style
+/// activate", which fires the adjacent Tree's activate event — the
+/// plugin's handler then opens the first match's file and the focus
+/// leaves the panel.
 fn enter_search_and_replace(harness: &mut EditorTestHarness, search: &str, replace: &str) {
-    // Panel opens with focus on search field — wait for it to render
     harness
         .wait_until(|h| h.screen_to_string().contains("Search:"))
         .unwrap();
 
-    // Type the search term directly (characters go into the inline field)
     harness.type_text(search).unwrap();
     harness.render().unwrap();
 
-    // Press Enter to move to replace field
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::NONE)
-        .unwrap();
+    harness.send_key(KeyCode::Tab, KeyModifiers::NONE).unwrap();
     harness.render().unwrap();
 
-    // Type the replacement
     harness.type_text(replace).unwrap();
-    harness.render().unwrap();
-
-    // Press Enter to confirm and run search
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::NONE)
-        .unwrap();
     harness.render().unwrap();
 }
 
