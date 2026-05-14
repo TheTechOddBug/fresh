@@ -880,6 +880,12 @@ pub fn build_search_regex(
     } else {
         format!("(?i){}", re_pattern)
     };
+    // Multi-line regex patterns get (?s) so `.` matches newlines.
+    let re_pattern = if !opts.fixed_string && pattern.contains('\n') {
+        format!("(?s){}", re_pattern)
+    } else {
+        re_pattern
+    };
     regex::bytes::Regex::new(&re_pattern)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
 }
@@ -2171,6 +2177,26 @@ mod tests {
             matches.is_empty(),
             "mid-stream NUL should abort scan and discard pseudo-matches"
         );
+    }
+
+    #[test]
+    fn test_multiline_regex_dotall_implicit() {
+        // Pattern with a literal newline + a `.+` should span the line break.
+        let opts = FileSearchOptions {
+            fixed_string: false,
+            case_sensitive: true,
+            whole_word: false,
+            max_matches: 100,
+        };
+        let re = build_search_regex("foo\n.+bar", &opts).unwrap();
+        assert!(re.is_match(b"foo\nXXXXbar"));
+        // Sanity: literal mode also matches the embedded newline.
+        let opts_lit = FileSearchOptions {
+            fixed_string: true,
+            ..opts
+        };
+        let re_lit = build_search_regex("foo\nbar", &opts_lit).unwrap();
+        assert!(re_lit.is_match(b"foo\nbar"));
     }
 
     #[test]
