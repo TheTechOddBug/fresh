@@ -955,6 +955,10 @@ let activeSearchHandle: SearchHandle | null = null;
 /** Pump cadence between successive `take()` drains (ms). The host writes
  * matches at full speed; this knob bounds the UI rebuild rate. */
 const SEARCH_PUMP_INTERVAL_MS = 50;
+/** Minimum interval between intermediate `updatePanelContent()` calls
+ *  during streaming. See the comment on the throttle in performSearch. */
+const STREAMING_UPDATE_MIN_MS = 300;
+let lastStreamingUpdate = 0;
 
 /**
  * Perform a streaming search using a pull-based handle. The host writes
@@ -973,6 +977,10 @@ async function performSearch(pattern: string, silent?: boolean): Promise<SearchR
   // result set isn't meaningful for the new one.
   panel.expandedFileKeys.clear();
   panel.knownFileKeys.clear();
+  // New search → next intermediate update should fire immediately, not
+  // be delayed by the throttle from a previous (potentially recent)
+  // search's last update.
+  lastStreamingUpdate = 0;
 
   // Cancel any in-flight search before kicking off a new one. Without
   // this the prior search would keep walking the project until it
@@ -1017,13 +1025,22 @@ async function performSearch(pattern: string, silent?: boolean): Promise<SearchR
         }
         panel.searchResults = allResults;
         panel.fileGroups = buildFileGroups(allResults);
+      }
+      // Throttle the streaming re-render. Without this, a search that
+      // returns thousands of matches (e.g. project-wide grep for a
+      // common word) re-emits the full panel spec — toolbar + scope
+      // row + ~5000-row Tree — on every 50 ms pump tick. The IPC traffic
+      // and per-emit host work make Tab / Esc / typing wait seconds for
+      // the pump to finish. Cap at one render per 300 ms during
+      // streaming; the final batch unconditionally flushes regardless
+      // of throttle state.
+      const now = Date.now();
+      const due = now - lastStreamingUpdate >= STREAMING_UPDATE_MIN_MS;
+      if (batch.matches.length > 0 && due) {
+        lastStreamingUpdate = now;
         updatePanelContent();
       } else if (batch.done) {
-        // Final iteration with no new matches still needs a UI flush
-        // when the previous tick ended on a non-empty batch but didn't
-        // know it was the last one.
-        panel.searchResults = allResults;
-        panel.fileGroups = buildFileGroups(allResults);
+        lastStreamingUpdate = now;
         updatePanelContent();
       }
 
