@@ -86,3 +86,54 @@ fn test_smart_home_respects_soft_wrap() {
         pos_after_end
     );
 }
+
+/// Regression: smart home must run for every cursor in a multi-cursor edit,
+/// not only the primary. Pre-fix, the primary moved to first-non-ws / line
+/// start but secondaries stayed put, and a follow-up insert landed at
+/// end-of-line on those secondaries instead of at the indent column.
+#[test]
+fn test_smart_home_runs_on_all_cursors() {
+    let mut harness = EditorTestHarness::new(80, 24).unwrap();
+
+    // Two indented lines. Use long content so cursors sit mid-line — placing
+    // a cursor exactly at line-end lands it on the `\n` boundary which the
+    // line iterator attributes to the *next* line.
+    harness.type_text("    aaaaaa").unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.type_text("    bbbbbb").unwrap();
+    harness.assert_buffer_content("    aaaaaa\n    bbbbbb");
+
+    // Place the primary cursor mid-way through line 1, then add a secondary
+    // below. Both cursors now sit mid-line, past the first-non-whitespace
+    // column — that's the precondition the bug needs to surface (a Home press
+    // must move BOTH cursors back to col 4, not just the primary).
+    harness
+        .send_key(KeyCode::Home, KeyModifiers::CONTROL)
+        .unwrap();
+    for _ in 0..9 {
+        harness
+            .send_key(KeyCode::Right, KeyModifiers::NONE)
+            .unwrap();
+    }
+    harness.editor_mut().add_cursor_below();
+
+    // First Home press: smart_home should toggle BOTH cursors to first-non-ws
+    // (column 4 on each line). Typing 'X' then inserts at column 4 on every
+    // line, sliding the existing content right.
+    harness.send_key(KeyCode::Home, KeyModifiers::NONE).unwrap();
+    harness.type_text("X").unwrap();
+    harness.render().unwrap();
+    harness.assert_buffer_content("    Xaaaaaa\n    Xbbbbbb");
+
+    // Second pair of Home presses: from "just after X" (col 5), one Home
+    // toggles back to first-non-ws (col 4 — the X), and a second Home toggles
+    // to line start (col 0) on BOTH cursors. Typing 'Z' inserts at column 0
+    // of every line.
+    harness.send_key(KeyCode::Home, KeyModifiers::NONE).unwrap();
+    harness.send_key(KeyCode::Home, KeyModifiers::NONE).unwrap();
+    harness.type_text("Z").unwrap();
+    harness.render().unwrap();
+    harness.assert_buffer_content("Z    Xaaaaaa\nZ    Xbbbbbb");
+}

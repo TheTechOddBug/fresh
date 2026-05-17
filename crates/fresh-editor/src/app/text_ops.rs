@@ -12,63 +12,70 @@ use crate::model::event::{Event, LeafId};
 use super::Editor;
 
 impl Editor {
-    /// Smart home: toggle between line start and first non-whitespace character
+    /// Smart home: toggle between line start and first non-whitespace character.
+    ///
+    /// Runs independently for every cursor so multi-cursor selections all move
+    /// to their respective line starts / first-non-ws positions.
     pub(super) fn smart_home(&mut self) {
         let estimated_line_length = self.config.editor.estimated_line_length;
-        let cursor = *self.active_cursors().primary();
-        let cursor_id = self.active_cursors().primary_id();
+        let line_wrap = self.config.editor.line_wrap;
 
-        // When line wrap is on, use the visual (soft-wrapped) line boundaries
-        if self.config.editor.line_wrap {
-            let split_id = self
-                .windows
-                .get(&self.active_window)
-                .and_then(|w| w.buffers.splits())
-                .map(|(mgr, _)| mgr)
-                .expect("active window must have a populated split layout")
-                .active_split();
-            if let Some(new_pos) =
+        // Snapshot every cursor up front; the move events we emit below
+        // mutate the cursor table while we iterate.
+        let cursors: Vec<(crate::model::event::CursorId, crate::model::cursor::Cursor)> = self
+            .active_cursors()
+            .iter()
+            .map(|(id, c)| (id, *c))
+            .collect();
+
+        let split_id = if line_wrap {
+            Some(
+                self.windows
+                    .get(&self.active_window)
+                    .and_then(|w| w.buffers.splits())
+                    .map(|(mgr, _)| mgr)
+                    .expect("active window must have a populated split layout")
+                    .active_split(),
+            )
+        } else {
+            None
+        };
+
+        let mut events: Vec<Event> = Vec::new();
+
+        for (cursor_id, cursor) in cursors {
+            // Try the visual-line path first when line wrap is on.
+            let visual_target = if let Some(split_id) = split_id {
                 self.smart_home_visual_line(split_id, cursor.position, estimated_line_length)
-            {
-                let event = Event::MoveCursor {
-                    cursor_id,
-                    old_position: cursor.position,
-                    new_position: new_pos,
-                    old_anchor: cursor.anchor,
-                    new_anchor: None,
-                    old_sticky_column: cursor.sticky_column,
-                    new_sticky_column: 0,
-                };
-                self.active_event_log_mut().append(event.clone());
-                self.apply_event_to_active_buffer(&event);
-                return;
-            }
-            // Fall through to physical line logic if visual lookup fails
-        }
-
-        let state = self.active_state_mut();
-
-        // Get physical line information
-        let mut iter = state
-            .buffer
-            .line_iterator(cursor.position, estimated_line_length);
-        if let Some((line_start, line_content)) = iter.next_line() {
-            // Find first non-whitespace character
-            let first_non_ws = line_content
-                .chars()
-                .take_while(|c| *c != '\n')
-                .position(|c| !c.is_whitespace())
-                .map(|offset| line_start + offset)
-                .unwrap_or(line_start);
-
-            // Toggle: if at first non-ws, go to line start; otherwise go to first non-ws
-            let new_pos = if cursor.position == first_non_ws {
-                line_start
             } else {
-                first_non_ws
+                None
             };
 
-            let event = Event::MoveCursor {
+            let new_pos = if let Some(pos) = visual_target {
+                pos
+            } else {
+                // Fall back to physical-line toggle.
+                let state = self.active_state_mut();
+                let mut iter = state
+                    .buffer
+                    .line_iterator(cursor.position, estimated_line_length);
+                let Some((line_start, line_content)) = iter.next_line() else {
+                    continue;
+                };
+                let first_non_ws = line_content
+                    .chars()
+                    .take_while(|c| *c != '\n')
+                    .position(|c| !c.is_whitespace())
+                    .map(|offset| line_start + offset)
+                    .unwrap_or(line_start);
+                if cursor.position == first_non_ws {
+                    line_start
+                } else {
+                    first_non_ws
+                }
+            };
+
+            events.push(Event::MoveCursor {
                 cursor_id,
                 old_position: cursor.position,
                 new_position: new_pos,
@@ -76,11 +83,23 @@ impl Editor {
                 new_anchor: None,
                 old_sticky_column: cursor.sticky_column,
                 new_sticky_column: 0,
-            };
-
-            self.active_event_log_mut().append(event.clone());
-            self.apply_event_to_active_buffer(&event);
+            });
         }
+
+        if events.is_empty() {
+            return;
+        }
+
+        let batch = if events.len() == 1 {
+            events.into_iter().next().unwrap()
+        } else {
+            Event::Batch {
+                events,
+                description: "Smart home (multi-cursor)".to_string(),
+            }
+        };
+        self.active_event_log_mut().append(batch.clone());
+        self.apply_event_to_active_buffer(&batch);
     }
 
     /// Compute the smart-home target for a visual (soft-wrapped) line.
