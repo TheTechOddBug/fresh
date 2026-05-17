@@ -237,39 +237,41 @@ pub fn add_cursor_above(state: &mut EditorState, cursors: &Cursors) -> AddCursor
     }
 }
 
-/// Compute end-of-line byte positions for every line covered by the primary
-/// cursor's selection range (or the cursor's current line when there is no
-/// selection). Used to place cursors at the end of each line.
+/// Compute end-of-line byte positions for every line covered by ANY existing
+/// cursor's selection (or the cursor's current line when there is no
+/// selection). Used to place cursors at the end of each line, matching
+/// VSCode's "Add Cursor to Line Ends" / Sublime's "Split Selection into Lines"
+/// semantics where every existing cursor contributes, not just the primary.
 ///
 /// "End of line" is the byte offset immediately before the trailing `\n`
 /// (or `\r\n`), or the position past the last byte for the final line of a
 /// buffer without a trailing newline.
+///
+/// Returned positions are sorted in document order and deduplicated, so two
+/// cursors on the same line collapse to a single line-end.
 pub fn line_end_positions_in_selection(state: &mut EditorState, cursors: &Cursors) -> Vec<usize> {
-    let primary = cursors.primary();
-    let (range_start, range_end) = match primary.selection_range() {
-        Some(range) => (range.start, range.end),
-        None => (primary.position, primary.position),
-    };
-
     let mut positions = Vec::new();
-    let mut iter = state.buffer.line_iterator(range_start, 80);
-    while let Some((line_start, line_content)) = iter.next_line() {
-        // Stop when we've moved past the selection's end line.
-        // The line we want to include is the one containing range_end;
-        // a line strictly after that has line_start > range_end.
-        if line_start > range_end {
-            break;
+    for (_id, cursor) in cursors.iter() {
+        let (range_start, range_end) = match cursor.selection_range() {
+            Some(range) => (range.start, range.end),
+            None => (cursor.position, cursor.position),
+        };
+        let mut iter = state.buffer.line_iterator(range_start, 80);
+        while let Some((line_start, line_content)) = iter.next_line() {
+            // Stop when we've moved past the selection's end line.
+            // The line we want to include is the one containing range_end;
+            // a line strictly after that has line_start > range_end.
+            if line_start > range_end {
+                break;
+            }
+            let trimmed = line_content
+                .trim_end_matches('\n')
+                .trim_end_matches('\r')
+                .len();
+            positions.push(line_start + trimmed);
         }
-        let trimmed = line_content
-            .trim_end_matches('\n')
-            .trim_end_matches('\r')
-            .len();
-        positions.push(line_start + trimmed);
     }
-
-    // Deduplicate consecutive equal positions (defensive — line_iterator should
-    // not yield duplicate line_starts, but trim_end_matches could collapse on
-    // an empty trailing line). Keep first occurrence.
+    positions.sort_unstable();
     positions.dedup();
     positions
 }

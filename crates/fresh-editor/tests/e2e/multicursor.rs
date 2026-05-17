@@ -2150,3 +2150,65 @@ fn test_add_cursors_to_line_ends_single_line() {
     assert_eq!(cursors.primary().position, 10);
     assert!(cursors.primary().collapsed());
 }
+
+/// Regression: when the user already has multiple collapsed cursors on
+/// different lines, invoking the command must keep every cursor and move each
+/// to the end of its own line — not wipe everything down to a single cursor.
+///
+/// This matches VSCode's "Add Cursor to Line Ends" semantics: every existing
+/// cursor contributes, no cursor is silently dropped.
+#[test]
+fn test_add_cursors_to_line_ends_keeps_existing_multi_cursors() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let mut harness = EditorTestHarness::new(80, 24).unwrap();
+
+    harness.type_text("alpha").unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.type_text("beta").unwrap();
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+    harness.type_text("gamma").unwrap();
+    harness.assert_buffer_content("alpha\nbeta\ngamma");
+
+    // Place the primary cursor at the start of line 1 ("alpha"), then add
+    // collapsed cursors on lines 2 and 3 via "add cursor below".
+    harness
+        .send_key(KeyCode::Home, KeyModifiers::CONTROL)
+        .unwrap();
+    harness.editor_mut().add_cursor_below();
+    harness.editor_mut().add_cursor_below();
+
+    let before = harness.editor().active_cursors().iter().count();
+    assert_eq!(
+        before, 3,
+        "test setup: expected 3 collapsed cursors before invoking command"
+    );
+
+    harness.editor_mut().add_cursors_to_line_ends();
+    harness.render().unwrap();
+
+    let cursors = harness.editor().active_cursors();
+    assert_eq!(
+        cursors.iter().count(),
+        3,
+        "expected all 3 cursors to survive; pre-fix behaviour collapsed to 1"
+    );
+
+    // Every cursor should be collapsed and at end of its respective line:
+    // "alpha" ends at 5, "alpha\nbeta" ends at 10, "alpha\nbeta\ngamma" ends at 16.
+    let mut positions: Vec<usize> = cursors.iter().map(|(_, c)| c.position).collect();
+    positions.sort_unstable();
+    assert_eq!(positions, vec![5, 10, 16]);
+    for (_id, c) in cursors.iter() {
+        assert!(c.collapsed(), "all cursors must be collapsed");
+    }
+
+    // Typing appends to every line.
+    harness.type_text("!").unwrap();
+    harness.render().unwrap();
+    harness.assert_buffer_content("alpha!\nbeta!\ngamma!");
+}
+

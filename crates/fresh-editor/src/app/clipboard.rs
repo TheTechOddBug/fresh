@@ -12,6 +12,7 @@ use crate::input::multi_cursor::{
     AddCursorResult,
 };
 use crate::model::buffer_position::byte_to_2d;
+use crate::model::cursor::Cursor;
 use crate::model::event::{CursorId, Event};
 use crate::primitives::word_navigation::{
     find_vi_word_end, find_word_start_left, find_word_start_right,
@@ -860,13 +861,14 @@ impl Editor {
         }
     }
 
-    /// Place a cursor at the end of every line covered by the primary
-    /// cursor's selection. Removes all existing secondary cursors and clears
-    /// selections. If the primary cursor has no selection, this collapses to
-    /// "move to end of current line".
+    /// Place a cursor at the end of every line covered by ANY existing
+    /// cursor's selection (or each cursor's own line if it has no selection).
+    /// Matches VSCode's "Add Cursor to Line Ends" / Sublime's "Split Selection
+    /// into Lines": every existing cursor contributes, no cursor is silently
+    /// dropped. Two cursors on the same line collapse to a single cursor.
+    /// All selections are cleared.
     pub fn add_cursors_to_line_ends(&mut self) {
         let cursors = self.active_cursors().clone();
-        let primary_id = cursors.primary_id();
         let state = self.active_state_mut();
         let positions = line_end_positions_in_selection(state, &cursors);
 
@@ -876,43 +878,52 @@ impl Editor {
             return;
         }
 
-        let primary = *cursors.primary();
-        let mut events: Vec<Event> = Vec::new();
+        // Sort the existing cursors in document order and map them index-wise
+        // onto the new positions. This preserves cursor IDs where possible —
+        // important for undo/redo — and minimises the move distance for each
+        // surviving cursor.
+        let mut existing: Vec<(CursorId, Cursor)> =
+            cursors.iter().map(|(id, c)| (id, *c)).collect();
+        existing.sort_by_key(|(_, c)| c.position);
 
-        // Drop all secondary cursors first.
-        for (cursor_id, cursor) in cursors.iter() {
-            if cursor_id != primary_id {
-                events.push(Event::RemoveCursor {
-                    cursor_id,
-                    position: cursor.position,
-                    anchor: cursor.anchor,
-                });
-            }
+        let mut events: Vec<Event> = Vec::new();
+        let reuse = existing.len().min(positions.len());
+
+        for i in 0..reuse {
+            let (cursor_id, cur) = existing[i];
+            let target = positions[i];
+            events.push(Event::MoveCursor {
+                cursor_id,
+                old_position: cur.position,
+                new_position: target,
+                old_anchor: cur.anchor,
+                new_anchor: None,
+                old_sticky_column: cur.sticky_column,
+                new_sticky_column: 0,
+            });
         }
 
-        // Move primary to the first end-of-line position, clearing any selection.
-        let primary_target = positions[0];
-        events.push(Event::MoveCursor {
-            cursor_id: primary_id,
-            old_position: primary.position,
-            new_position: primary_target,
-            old_anchor: primary.anchor,
-            new_anchor: None,
-            old_sticky_column: primary.sticky_column,
-            new_sticky_column: 0,
-        });
+        // If two cursors collapsed onto the same line, dedup left us with
+        // fewer positions than cursors — drop the extras.
+        for &(cursor_id, cur) in existing.iter().skip(reuse) {
+            events.push(Event::RemoveCursor {
+                cursor_id,
+                position: cur.position,
+                anchor: cur.anchor,
+            });
+        }
 
-        // Add a new cursor at the end of each subsequent line.
-        // Pick IDs strictly above the highest existing one so we never
-        // collide with a cursor that an undo could re-insert later.
+        // Add fresh cursors for any extra line ends, with IDs strictly above
+        // the highest existing one so we never collide with a cursor an undo
+        // could re-insert later.
         let next_free_id = cursors
             .iter()
             .map(|(id, _)| id.0)
             .max()
             .map(|m| m + 1)
             .unwrap_or(0);
-        for (i, &pos) in positions.iter().enumerate().skip(1) {
-            let new_id = CursorId(next_free_id + i - 1);
+        for (i, &pos) in positions.iter().enumerate().skip(reuse) {
+            let new_id = CursorId(next_free_id + i - reuse);
             events.push(Event::AddCursor {
                 cursor_id: new_id,
                 position: pos,
