@@ -687,7 +687,10 @@ impl Editor {
                     self.active_window_mut().pending_key_capture_buffer.clear();
                 }
             }
-            PluginCommand::SetPromptSuggestions { suggestions, selected_index } => {
+            PluginCommand::SetPromptSuggestions {
+                suggestions,
+                selected_index,
+            } => {
                 self.handle_set_prompt_suggestions(suggestions, selected_index);
             }
             PluginCommand::SetPromptInputSync { sync } => {

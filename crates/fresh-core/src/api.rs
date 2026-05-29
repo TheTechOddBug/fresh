@@ -4878,7 +4878,10 @@ impl PluginApi {
     /// Set the suggestions for the current prompt
     /// This updates the prompt's autocomplete/selection list
     pub fn set_prompt_suggestions(&self, suggestions: Vec<Suggestion>) -> Result<(), String> {
-        self.send_command(PluginCommand::SetPromptSuggestions { suggestions, selected_index: None })
+        self.send_command(PluginCommand::SetPromptSuggestions {
+            suggestions,
+            selected_index: None,
+        })
     }
 
     /// Enable/disable syncing prompt input text when navigating suggestions

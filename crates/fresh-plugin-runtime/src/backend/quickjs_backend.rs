@@ -4150,7 +4150,10 @@ impl JsEditorApi {
         selected_index: Option<u32>,
     ) -> bool {
         self.command_sender
-            .send(PluginCommand::SetPromptSuggestions { suggestions, selected_index })
+            .send(PluginCommand::SetPromptSuggestions {
+                suggestions,
+                selected_index,
+            })
             .is_ok()
     }
 

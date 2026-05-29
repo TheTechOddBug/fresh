@@ -317,9 +317,7 @@ done
     harness.render()?;
 
     // Wait for symbols to appear
-    harness.wait_until(|h| {
-        h.screen_to_string().contains("[method] myMethod")
-    })?;
+    harness.wait_until(|h| h.screen_to_string().contains("[method] myMethod"))?;
 
     // Verify myMethod is preselected (not the default first item)
     let selection =
@@ -455,9 +453,7 @@ done
     harness.wait_for_prompt()?;
     harness.render()?;
 
-    harness.wait_until(|h| {
-        h.screen_to_string().contains("[class] MyClass")
-    })?;
+    harness.wait_until(|h| h.screen_to_string().contains("[class] MyClass"))?;
 
     // Verify the default (first item) is selected
     let selection =
