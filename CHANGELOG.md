@@ -1,6 +1,6 @@
 # Release Notes
 
-## 0.3.11
+## 0.3.12
 
 For live updates on Fresh, [follow me on X](https://x.com/TheNoamLewis).
 
@@ -45,7 +45,8 @@ For live updates on Fresh, [follow me on X](https://x.com/TheNoamLewis).
 * The dock's working/idle indicator tracks the right session and idles when output stops.
 * A worktree session in a repo with no commits reports git's real error.
 * Text-input fields in dialogs focus on click (#2234).
-* Diff "removed" lines no longer wrap one character per row at narrow widths (#2177).
+* Diff "removed" lines no longer wrap one character per row at narrow widths, or when a language overrides the wrap column to 0 (#2177, reported by @biscuitvicious).
+* LSP hover popups no longer appear while the LSP status popup is open (#2244, reported by @biscuitvicious).
 * `editor.scroll_offset` is respected (#2162, reported and fixed by @PavelLoparev).
 * Windows: long paths middle-truncate, and short-name / `\\?\` path differences no longer reorder the dock.
 * Fixed a marker-tree corruption that could drop edits to markers and highlights.
