@@ -376,27 +376,6 @@ impl WidgetRegistry {
         self.panels.keys().copied().collect()
     }
 
-    /// Diagnostic: `(buffer_row, byte_start, byte_end, event)` for every hit
-    /// area registered against `buffer_id`. Used to debug click-vs-render
-    /// desyncs (see the dock dead-click investigation).
-    pub fn hit_rows_debug(&self, buffer_id: BufferId) -> Vec<(u32, usize, usize, String)> {
-        let mut out = Vec::new();
-        for state in self.panels.values() {
-            if state.buffer_id != buffer_id {
-                continue;
-            }
-            for h in &state.hits {
-                out.push((
-                    h.buffer_row,
-                    h.byte_start,
-                    h.byte_end,
-                    h.event_type.to_string(),
-                ));
-            }
-        }
-        out
-    }
-
     /// Panels rendering into `buffer_id`. Used by mouse-wheel
     /// routing to find which widget panel sits under the pointer.
     pub fn panels_for_buffer(&self, buffer_id: BufferId) -> Vec<PanelId> {

@@ -4248,22 +4248,9 @@ impl Editor {
                     hit.widget_kind,
                 ),
                 None => {
-                    // Diagnostic for the dead-click desync: dump the rendered
-                    // entry at this row alongside the registry's hit rows so we
-                    // can tell whether the list is shorter than it looks, the
-                    // click byte is past the row text, or a hit-range mismatch.
-                    let entry_text = entries
-                        .get(brow as usize)
-                        .map(|e| e.text.clone())
-                        .unwrap_or_default();
-                    let hit_rows = self.widget_registry.hit_rows_debug(slot.buffer_id());
                     tracing::debug!(
                         target: "fresh::dock",
                         ?slot, col, row, brow, bcol,
-                        entries_len = entries.len(),
-                        entry_len = entry_text.len(),
-                        entry_text = %entry_text,
-                        ?hit_rows,
                         "handle_floating_widget_click: hit_test found no widget"
                     );
                     return;
