@@ -686,10 +686,12 @@ impl schemars::JsonSchema for StatusBarElement {
 }
 
 fn default_status_bar_left() -> Vec<StatusBarElement> {
-    // `{remote}` leads so the clickable Remote Indicator is the
-    // first thing on the bottom-left, matching the spec's
-    // "persistent control" requirement and where users learn to
-    // look for it from VS Code. Mouse-clickable, F6-bindable.
+    // `{trust}` leads: the workspace-trust state is the first thing on the
+    // bottom-left, so whether repo-controlled execution is gated is always
+    // visible (the "restricted mode is always visible" guarantee). `{remote}`
+    // follows as the next persistent, clickable control — the bottom-left is
+    // where users learn to look for both from VS Code. Both are
+    // mouse-clickable and key-bindable.
     //
     // Note: the `Filename` element historically also prepended
     // `[Container:<id>] ` / `<SSH_PREFIX>conn<TERMINATOR>` to its
@@ -698,6 +700,7 @@ fn default_status_bar_left() -> Vec<StatusBarElement> {
     // Filename branch, which now skips the prefix when the
     // indicator is on the bar.
     vec![
+        StatusBarElement::WorkspaceTrust,
         StatusBarElement::RemoteIndicator,
         StatusBarElement::Filename,
         StatusBarElement::Cursor,
