@@ -1397,6 +1397,16 @@ impl StatusBarRenderer {
                 ),
                 RemoteIndicatorState::Local => ("ui.status_bar_fg", "ui.status_bar_bg"),
             },
+            ElementKind::WorkspaceTrust(level) => {
+                use crate::services::workspace_trust::TrustLevel;
+                match level {
+                    TrustLevel::Restricted | TrustLevel::Blocked => (
+                        "ui.status_warning_indicator_fg",
+                        "ui.status_warning_indicator_bg",
+                    ),
+                    TrustLevel::Trusted => ("ui.status_bar_fg", "ui.status_bar_bg"),
+                }
+            }
         }
     }
 

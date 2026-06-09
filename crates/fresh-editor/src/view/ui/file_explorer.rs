@@ -1,3 +1,4 @@
+use crate::app::types::CellThemeRecorder;
 use crate::input::fuzzy::FuzzyMatch;
 use crate::primitives::display_width::str_width;
 use crate::view::file_tree::{
@@ -51,8 +52,24 @@ impl FileExplorerRenderer {
         cut_paths: &[PathBuf],
         tree_indicator_collapsed: &str,
         tree_indicator_expanded: &str,
+        mut rec: Option<&mut CellThemeRecorder>,
     ) {
         let search_active = view.is_search_active();
+
+        // Seed the whole explorer rect with its surface keys so border/content
+        // rows resolve to the explorer; the selected row is refined below.
+        if let Some(r) = rec.as_deref_mut() {
+            for row in area.y..area.y + area.height {
+                r.run(
+                    area.x,
+                    row,
+                    area.width,
+                    Some("editor.fg"),
+                    Some("editor.bg"),
+                    "File Explorer",
+                );
+            }
+        }
 
         // Update viewport height for scrolling calculations
         // Account for borders (top + bottom = 2)
@@ -193,6 +210,31 @@ impl FileExplorerRenderer {
         }
 
         frame.render_stateful_widget(list, area, &mut list_state);
+
+        // Refine the selected row with its highlight keys (focused → selection
+        // background, blurred → current-line background).
+        if let Some(r) = rec.as_deref_mut() {
+            if let Some(selected) = selected_index {
+                if selected >= scroll_offset && selected < scroll_offset + viewport_height {
+                    let row = area.y + 1 + (selected - scroll_offset) as u16;
+                    let inner_x = area.x + 1;
+                    let inner_w = area.width.saturating_sub(2);
+                    let bg_key = if is_focused {
+                        "editor.selection_bg"
+                    } else {
+                        "editor.current_line_bg"
+                    };
+                    r.run(
+                        inner_x,
+                        row,
+                        inner_w,
+                        Some("editor.fg"),
+                        Some(bg_key),
+                        "File Explorer",
+                    );
+                }
+            }
+        }
 
         // Render close button "×" at the right side of the title bar
         let close_button_x = area.x + area.width.saturating_sub(3);

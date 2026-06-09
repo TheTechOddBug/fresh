@@ -183,23 +183,7 @@ impl Editor {
             }
         }
 
-        // File explorer
-        if let Some(area) = self.active_layout().file_explorer_area {
-            let info = CellThemeInfo {
-                fg_key: Some("editor.fg".into()),
-                bg_key: Some("editor.bg".into()),
-                region: "File Explorer".into(),
-                syntax_category: None,
-            };
-            for row in area.y..area.y + area.height {
-                for col in area.x..area.x + area.width {
-                    let idx = row as usize * sw + col as usize;
-                    if let Some(cell) = self.active_chrome_mut().cell_theme_map.get_mut(idx) {
-                        *cell = info.clone();
-                    }
-                }
-            }
-        }
+        // File explorer is recorded during paint (see file_explorer.rs).
 
         // Scrollbars are recorded during paint (see orchestration/mod.rs).
 

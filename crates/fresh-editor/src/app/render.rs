@@ -260,6 +260,9 @@ impl Editor {
                 Some(HoverTarget::FileExplorerCloseButton)
             );
             let slot_resolver = self.file_explorer_slot_resolver();
+            // Theme-key runs the explorer records as it paints; applied to the
+            // chrome cell map after the window borrow is released.
+            let mut fe_runs: Vec<crate::app::types::ThemeRun> = Vec::new();
             // Take one &mut on the active window; the explorer + buffers
             // come from disjoint sub-fields so they can coexist.
             let __win = self
@@ -305,10 +308,12 @@ impl Editor {
                     cut_paths,
                     &self.config.file_explorer.tree_indicator_collapsed,
                     &self.config.file_explorer.tree_indicator_expanded,
+                    Some(&mut crate::app::types::CellThemeRecorder::new(&mut fe_runs)),
                 );
             }
             // Note: if file_explorer is None but sync_in_progress is true,
             // we just leave the area blank (or could render a placeholder)
+            self.active_chrome_mut().apply_theme_runs(&fe_runs);
         } else {
             // No file explorer: use entire main content area for editor
             self.active_layout_mut().file_explorer_area = None;
