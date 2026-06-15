@@ -916,6 +916,7 @@ impl Editor {
                 if inherit_clicked {
                     dialog.inherit_field(idx);
                     dialog.focus_on_buttons = false;
+                    dialog.inherit_focused = false;
                     dialog.selected_item = idx;
                     dialog.update_focus_states();
                     return Ok(true);
@@ -932,6 +933,7 @@ impl Editor {
                     return self.handle_text_list_click(idx, sub_row, col, layout);
                 }
                 dialog.focus_on_buttons = false;
+                dialog.inherit_focused = false;
                 dialog.selected_item = idx;
                 dialog.update_focus_states();
                 if !dialog.editing_text {
