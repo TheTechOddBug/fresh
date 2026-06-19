@@ -28,6 +28,8 @@ for file in "${FILES[@]}"; do
     --lib esnext,dom \
     --skipLibCheck \
     --allowImportingTsExtensions \
+    --ignoreConfig \
+    --ignoreDeprecations 6.0 \
     "$file" 2>&1; then
     ERRORS=$((ERRORS + 1))
   fi
