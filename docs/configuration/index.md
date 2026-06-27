@@ -378,9 +378,13 @@ In the Settings UI, each setting shows where its current value comes from:
 
 ## Status Bar
 
-The left and right sides of the status bar are configurable through the Settings UI. Each side uses a **DualList** picker: items live in an **Available** column or an **Included** column, and you move them back and forth to show or hide them. Use the arrow buttons next to the Included list to reorder. Elements include the filename, cursor position, encoding, LSP indicator, git branch, warning counts, palette hint, a `{clock}` element that shows `HH:MM` with a blinking colon, and a `{remote}` indicator that lights up when you're attached to an SSH remote or a devcontainer.
+The left and right sides of the status bar are configurable through the Settings UI. Each side uses a **DualList** picker: items live in an **Available** column or an **Included** column, and you move them back and forth to show or hide them. Use the arrow buttons next to the Included list to reorder. Elements include the filename, cursor position, encoding, LSP indicator, git branch, warning counts, palette hint, a `{clock}` element that shows `HH:MM` with a blinking colon, a `{remote}` indicator that lights up when you're attached to an SSH remote or a devcontainer, a `{read_only}` `[RO]` indicator, and a clickable `{trust}` indicator (see [Workspace Trust](../features/workspace-trust.md)) that leads the left side by default. A separator drawn between elements can also be set in the Settings UI.
 
 The `{remote}` indicator is clickable — activate it to open a context-aware menu for the current authority (detach, show container logs, retry attach, etc.). It also reflects connection state: `Connecting`, `Connected`, or `FailedAttach`.
+
+## Screensaver
+
+Fresh can run a decorative wave screensaver after a period of inactivity. Enable it and set the idle delay in the Settings UI. You can also trigger the effect on demand with **Wave Animation** from the command palette. Switching themes plays a brief color-transition animation.
 
 ## Save Behavior
 
