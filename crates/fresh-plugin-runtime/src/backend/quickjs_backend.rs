@@ -10339,6 +10339,7 @@ mod tests {
                     root: std::path::PathBuf::from("/repo"),
                     project_path: std::path::PathBuf::from("/repo"),
                     shared_worktree: false,
+                    remote: None,
                 },
                 fresh_core::api::WindowInfo {
                     id: fresh_core::WindowId(2),
@@ -10346,6 +10347,7 @@ mod tests {
                     root: std::path::PathBuf::from("/wt/feat-auth"),
                     project_path: std::path::PathBuf::from("/wt/feat-auth"),
                     shared_worktree: false,
+                    remote: None,
                 },
             ];
             state.active_window_id = fresh_core::WindowId(2);
