@@ -149,6 +149,12 @@ test_highlighting_works!(test_highlight_slang, "hello.slang", 2);
 test_highlighting_works!(test_highlight_glsl, "hello.glsl", 2);
 test_highlighting_works!(test_highlight_hlsl, "hello.hlsl", 2);
 test_highlighting_works!(test_highlight_wgsl, "hello.wgsl", 2);
+test_highlighting_works!(test_highlight_metal, "hello.metal", 2);
+test_highlighting_works!(test_highlight_cuda, "hello.cu", 2);
+test_highlighting_works!(test_highlight_hip, "hello.hip", 2);
+test_highlighting_works!(test_highlight_fortran, "hello.f90", 2);
+test_highlighting_works!(test_highlight_mlir, "hello.mlir", 2);
+test_highlighting_works!(test_highlight_llvm_ir, "hello.ll", 2);
 
 // --- Alternate filenames/extensions that should work ---
 test_highlighting_works!(test_highlight_bash_ext, "hello.bash", 2);
@@ -237,6 +243,9 @@ test_highlighting_works!(test_highlight_editorconfig, "hello.editorconfig", 2);
 test_highlighting_works!(test_highlight_kdl, "hello.kdl", 2);
 test_highlighting_works!(test_highlight_nushell, "hello.nu", 2);
 test_highlighting_works!(test_highlight_smali, "hello.smali", 2);
+test_highlighting_works!(test_highlight_gettext_po, "hello.po", 2);
+test_highlighting_works!(test_highlight_m4, "hello.m4", 2);
+test_highlighting_works!(test_highlight_pbxproj, "project.pbxproj", 2);
 
 // --- Web framework languages ---
 test_highlighting_works!(test_highlight_vue, "hello.vue", 2);

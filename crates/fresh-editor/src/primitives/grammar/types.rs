@@ -218,6 +218,12 @@ pub const KDL_GRAMMAR: &str = include_str!("../../grammars/kdl.sublime-syntax");
 pub const NUSHELL_GRAMMAR: &str = include_str!("../../grammars/nushell.sublime-syntax");
 /// Embedded Smali grammar
 pub const SMALI_GRAMMAR: &str = include_str!("../../grammars/smali.sublime-syntax");
+/// Embedded Gettext PO grammar
+pub const GETTEXT_GRAMMAR: &str = include_str!("../../grammars/gettext.sublime-syntax");
+/// Embedded GNU m4 grammar
+pub const M4_GRAMMAR: &str = include_str!("../../grammars/m4.sublime-syntax");
+/// Embedded Xcode project grammar
+pub const PBXPROJ_GRAMMAR: &str = include_str!("../../grammars/pbxproj.sublime-syntax");
 /// Embedded Fish shell grammar
 pub const FISH_GRAMMAR: &str = include_str!("../../grammars/fish.sublime-syntax");
 /// Embedded Starlark/Bazel grammar
@@ -264,6 +270,18 @@ pub const GLSL_GRAMMAR: &str = include_str!("../../grammars/glsl.sublime-syntax"
 pub const HLSL_GRAMMAR: &str = include_str!("../../grammars/hlsl.sublime-syntax");
 /// Embedded WGSL shader grammar
 pub const WGSL_GRAMMAR: &str = include_str!("../../grammars/wgsl.sublime-syntax");
+/// Embedded Metal shader grammar
+pub const METAL_GRAMMAR: &str = include_str!("../../grammars/metal.sublime-syntax");
+/// Embedded CUDA grammar
+pub const CUDA_GRAMMAR: &str = include_str!("../../grammars/cuda.sublime-syntax");
+/// Embedded HIP grammar
+pub const HIP_GRAMMAR: &str = include_str!("../../grammars/hip.sublime-syntax");
+/// Embedded Fortran grammar
+pub const FORTRAN_GRAMMAR: &str = include_str!("../../grammars/fortran.sublime-syntax");
+/// Embedded MLIR grammar
+pub const MLIR_GRAMMAR: &str = include_str!("../../grammars/mlir.sublime-syntax");
+/// Embedded LLVM IR grammar
+pub const LLVM_IR_GRAMMAR: &str = include_str!("../../grammars/llvm-ir.sublime-syntax");
 
 /// Registry of all available TextMate grammars.
 ///
@@ -721,6 +739,9 @@ impl GrammarRegistry {
             (KDL_GRAMMAR, "KDL"),
             (NUSHELL_GRAMMAR, "Nushell"),
             (SMALI_GRAMMAR, "Smali"),
+            (GETTEXT_GRAMMAR, "Gettext PO"),
+            (M4_GRAMMAR, "M4"),
+            (PBXPROJ_GRAMMAR, "Xcode Project"),
             (FISH_GRAMMAR, "Fish"),
             (STARLARK_GRAMMAR, "Starlark"),
             (JUSTFILE_GRAMMAR, "Justfile"),
@@ -741,6 +762,12 @@ impl GrammarRegistry {
             (GLSL_GRAMMAR, "GLSL"),
             (HLSL_GRAMMAR, "HLSL"),
             (WGSL_GRAMMAR, "WGSL"),
+            (METAL_GRAMMAR, "Metal"),
+            (CUDA_GRAMMAR, "CUDA"),
+            (HIP_GRAMMAR, "HIP"),
+            (FORTRAN_GRAMMAR, "Fortran"),
+            (MLIR_GRAMMAR, "MLIR"),
+            (LLVM_IR_GRAMMAR, "LLVM IR"),
         ];
 
         for (grammar_str, name) in additional_grammars {
@@ -822,6 +849,11 @@ impl GrammarRegistry {
             ("f#", "FSharp"),
             ("terraform", "HCL"),
             ("tf", "HCL"),
+            ("po", "Gettext PO"),
+            ("gettext", "Gettext PO"),
+            ("pot", "Gettext PO"),
+            ("pbxproj", "Xcode Project"),
+            ("xcodeproj", "Xcode Project"),
             ("ts", "TypeScript"),
             ("js", "JavaScript"),
             ("py", "Python"),
@@ -830,6 +862,14 @@ impl GrammarRegistry {
             ("md", "Markdown"),
             ("yml", "YAML"),
             ("dockerfile", "Dockerfile"),
+            ("msl", "Metal"),
+            ("cu", "CUDA"),
+            ("cuh", "CUDA"),
+            ("f90", "Fortran"),
+            ("fortran", "Fortran"),
+            ("mlir", "MLIR"),
+            ("ll", "LLVM IR"),
+            ("llvm", "LLVM IR"),
         ]
     }
 
@@ -2230,6 +2270,99 @@ mod tests {
             .find_by_path(Path::new("MainActivity.smali"), None)
             .expect("Smali files should resolve");
         assert_eq!(entry.display_name, "Smali");
+        assert!(entry.engines.syntect.is_some());
+        assert!(entry.engines.tree_sitter.is_none());
+    }
+
+    #[test]
+    fn test_issue_2556_2557_2560_embedded_grammars_load_and_resolve() {
+        for (grammar, name, path) in [
+            (GETTEXT_GRAMMAR, "Gettext PO", "messages.po"),
+            (M4_GRAMMAR, "M4", "configure.ac"),
+            (PBXPROJ_GRAMMAR, "Xcode Project", "project.pbxproj"),
+        ] {
+            let syntax = SyntaxDefinition::load_from_str(grammar, true, Some(name))
+                .unwrap_or_else(|e| panic!("{name} grammar should parse: {e}"));
+            assert!(
+                !syntax.file_extensions.is_empty(),
+                "{name} grammar should declare file extensions"
+            );
+
+            let registry = GrammarRegistry::default();
+            let entry = registry
+                .find_by_path(Path::new(path), None)
+                .unwrap_or_else(|| panic!("{path} should resolve"));
+            assert_eq!(entry.display_name, name);
+            assert!(entry.engines.syntect.is_some());
+            assert!(entry.engines.tree_sitter.is_none());
+        }
+    }
+
+    #[test]
+    fn test_gpu_embedded_grammars_load_and_resolve() {
+        for (grammar, name, path) in [
+            (METAL_GRAMMAR, "Metal", "shader.metal"),
+            (CUDA_GRAMMAR, "CUDA", "kernel.cu"),
+            (HIP_GRAMMAR, "HIP", "kernel.hip"),
+        ] {
+            let syntax = SyntaxDefinition::load_from_str(grammar, true, Some(name))
+                .unwrap_or_else(|e| panic!("{name} grammar should parse: {e}"));
+            assert!(
+                !syntax.file_extensions.is_empty(),
+                "{name} grammar should declare file extensions"
+            );
+
+            let registry = GrammarRegistry::default();
+            let entry = registry
+                .find_by_path(Path::new(path), None)
+                .unwrap_or_else(|| panic!("{path} should resolve"));
+            assert_eq!(entry.display_name, name);
+            assert!(entry.engines.syntect.is_some());
+            assert!(entry.engines.tree_sitter.is_none());
+        }
+    }
+
+    #[test]
+    fn test_fortran_embedded_grammar_loads_and_resolves() {
+        let syntax = SyntaxDefinition::load_from_str(FORTRAN_GRAMMAR, true, Some("Fortran"))
+            .expect("Fortran grammar should parse");
+        assert!(syntax.file_extensions.iter().any(|ext| ext == "f90"));
+
+        let registry = GrammarRegistry::default();
+        let entry = registry
+            .find_by_path(Path::new("solver.f90"), None)
+            .expect("Fortran files should resolve");
+        assert_eq!(entry.display_name, "Fortran");
+        assert!(entry.engines.syntect.is_some());
+        assert!(entry.engines.tree_sitter.is_none());
+    }
+
+    #[test]
+    fn test_mlir_embedded_grammar_loads_and_resolves() {
+        let syntax = SyntaxDefinition::load_from_str(MLIR_GRAMMAR, true, Some("MLIR"))
+            .expect("MLIR grammar should parse");
+        assert!(syntax.file_extensions.iter().any(|ext| ext == "mlir"));
+
+        let registry = GrammarRegistry::default();
+        let entry = registry
+            .find_by_path(Path::new("model.mlir"), None)
+            .expect("MLIR files should resolve");
+        assert_eq!(entry.display_name, "MLIR");
+        assert!(entry.engines.syntect.is_some());
+        assert!(entry.engines.tree_sitter.is_none());
+    }
+
+    #[test]
+    fn test_llvm_ir_embedded_grammar_loads_and_resolves() {
+        let syntax = SyntaxDefinition::load_from_str(LLVM_IR_GRAMMAR, true, Some("LLVM IR"))
+            .expect("LLVM IR grammar should parse");
+        assert!(syntax.file_extensions.iter().any(|ext| ext == "ll"));
+
+        let registry = GrammarRegistry::default();
+        let entry = registry
+            .find_by_path(Path::new("module.ll"), None)
+            .expect("LLVM IR files should resolve");
+        assert_eq!(entry.display_name, "LLVM IR");
         assert!(entry.engines.syntect.is_some());
         assert!(entry.engines.tree_sitter.is_none());
     }

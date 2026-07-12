@@ -352,6 +352,9 @@ fn generate_syntax_packdump() -> Result<(), Box<dyn std::error::Error>> {
         ("src/grammars/kdl.sublime-syntax", "KDL"),
         ("src/grammars/nushell.sublime-syntax", "Nushell"),
         ("src/grammars/smali.sublime-syntax", "Smali"),
+        ("src/grammars/gettext.sublime-syntax", "Gettext PO"),
+        ("src/grammars/m4.sublime-syntax", "M4"),
+        ("src/grammars/pbxproj.sublime-syntax", "Xcode Project"),
         ("src/grammars/fish.sublime-syntax", "Fish"),
         ("src/grammars/starlark.sublime-syntax", "Starlark"),
         ("src/grammars/justfile.sublime-syntax", "Justfile"),
@@ -375,6 +378,12 @@ fn generate_syntax_packdump() -> Result<(), Box<dyn std::error::Error>> {
         ("src/grammars/glsl.sublime-syntax", "GLSL"),
         ("src/grammars/hlsl.sublime-syntax", "HLSL"),
         ("src/grammars/wgsl.sublime-syntax", "WGSL"),
+        ("src/grammars/metal.sublime-syntax", "Metal"),
+        ("src/grammars/cuda.sublime-syntax", "CUDA"),
+        ("src/grammars/hip.sublime-syntax", "HIP"),
+        ("src/grammars/fortran.sublime-syntax", "Fortran"),
+        ("src/grammars/mlir.sublime-syntax", "MLIR"),
+        ("src/grammars/llvm-ir.sublime-syntax", "LLVM IR"),
     ];
 
     let mut loaded = 0;
